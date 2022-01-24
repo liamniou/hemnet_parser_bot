@@ -1,46 +1,20 @@
-FROM ubuntu:focal
+FROM python:3.8
 
-ARG DEBIAN_FRONTEND=noninteractive
-RUN echo "===> Installing system dependencies..." && \
-    BUILD_DEPS="curl unzip" && \
-    apt-get update && apt-get install --no-install-recommends -y \
-    python3 python3-pip wget \
-    fonts-liberation libappindicator3-1 libasound2 libatk-bridge2.0-0 \
-    libnspr4 libnss3 lsb-release xdg-utils libxss1 libdbus-glib-1-2 libgbm1 \
-    $BUILD_DEPS \
-    xvfb && \
-    \
-    \
-    echo "===> Installing chromedriver and google-chrome..." && \
-    CHROMEDRIVER_VERSION=`curl -sS chromedriver.storage.googleapis.com/LATEST_RELEASE` && \
-    wget https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip && \
-    unzip chromedriver_linux64.zip -d /usr/bin && \
-    chmod +x /usr/bin/chromedriver && \
-    rm chromedriver_linux64.zip && \
-    \
-    apt-get install chromium-browser -y && \
-    \
-    \
-    echo "===> Installing phantomjs..." && \
-    wget https://bitbucket.org/ariya/phantomjs/downloads/phantomjs-2.1.1-linux-x86_64.tar.bz2 && \
-    tar -jxf phantomjs-2.1.1-linux-x86_64.tar.bz2 && \
-    cp phantomjs-2.1.1-linux-x86_64/bin/phantomjs /usr/local/bin/phantomjs && \
-    rm phantomjs-2.1.1-linux-x86_64.tar.bz2 && \
-    \
-    \
-    echo "===> Remove build dependencies..." && \
-    apt-get remove -y $BUILD_DEPS && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -y && apt-get install -y chromium \
+    build-essential libssl-dev libffi-dev python3-dev cargo rustc
+    # ^ these 6 are required for cryptography
 
-
-ENV LANG C.UTF-8
-ENV LC_ALL C.UTF-8
-ENV PYTHONUNBUFFERED=1
+# Installing Chromedriver for Selenium
+RUN wget https://github.com/electron/electron/releases/download/v16.0.6/chromedriver-v16.0.6-linux-armv7l.zip && \
+    unzip chromedriver-v16.0.6-linux-armv7l.zip -d /tmp && mv /tmp/chromedriver /usr/local/bin && \
+    chmod +x /usr/local/bin/chromedriver && \
+    rm chromedriver-v16.0.6-linux-armv7l.zip
 
 WORKDIR /app
 
 COPY ./app/requirements.txt ./
 
-RUN pip install -r requirements.txt
+RUN pip3 install -r requirements.txt
 
 COPY ./app/*.py ./
 
