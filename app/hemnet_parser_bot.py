@@ -5,17 +5,19 @@ import re
 import httpx
 import telebot
 from bs4 import BeautifulSoup
+from with_browser import open_page_find_images
 from telebot import types
+from time import sleep
 
 
-AUTHORIZED_USERS = [int(x) for x in os.getenv("AUTHORIZED_USERS").split(",")]
 bot = telebot.TeleBot(
     os.getenv("TELEGRAM_BOT_TOKEN"),
     threaded=False,
     parse_mode="MARKDOWN",
 )
-CHAT_ID = int(os.getenv("CHAT_ID"))
+AUTHORIZED_USERS = [int(x) for x in os.getenv("AUTHORIZED_USERS").split(",")]
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID"))
+CHAT_ID = int(os.getenv("CHAT_ID"))
 
 
 def parse_hemnet_page(page_url):
@@ -48,42 +50,62 @@ def parse_hemnet_page(page_url):
         obj["year"] = soup.select("dd.property-attributes-table__value")[6].text.strip()
         obj["avgift"] = soup.select("dd.property-attributes-table__value")[8].text.replace("\xa0", " ")
         obj["sq_m_price"] = soup.select("dd.property-attributes-table__value")[9].text.replace("\xa0", " ")
-        all_imgs = soup.find_all(lambda tag: tag.name == "img" and tag.get("data-src") is not None)
-        for img in all_imgs:
-            if "itemgallery_M" in img.attrs["data-src"]:
-                obj["property_imgs"].append(img.attrs["data-src"])
+        obj["property_imgs"] = open_page_find_images(page_url)
 
     return obj
 
 
-def send_text_message(parsing_result):
+def split_list_to_chunks(input_list, size):
+    for i in range(0, len(input_list), size):
+        yield input_list[i:i + size]
+
+
+def send_text_message(parsing_result, chat_id):
     message = f"""
 *{parsing_result['title']} {parsing_result['price']}*
 {parsing_result['address_area']}
 {parsing_result['rooms_n']}, {parsing_result['area']}, Balcony: {parsing_result['balcony']}, {parsing_result['level']}, {parsing_result['year']}
 {parsing_result['avgift']} - {parsing_result['sq_m_price']}
 """
-    bot.send_message(CHAT_ID, message)
+    bot.send_message(chat_id, message)
 
 
-def send_location(parsing_result):
-    with httpx.Client() as client:
-        maps_api = (
-            f"https://nominatim.openstreetmap.org/"
-            f"search?q=Sweden+Stockholm+{parsing_result['title'].replace(' ', '+')}"
-            f"&format=json&polygon=1&addressdetails=1"
-        )
-        maps_r = json.load(client.get(maps_api))
-        lat = maps_r[0]["lat"]
-        lon = maps_r[0]["lon"]
-        bot.send_location(CHAT_ID, lat, lon)
+def send_location(parsing_result, chat_id):
+    try:
+        with httpx.Client() as client:
+            maps_api = (
+                f"https://nominatim.openstreetmap.org/"
+                f"search?q=Sweden+Stockholm+{parsing_result['title'].split(',')[0].replace(' ', '+')}"
+                f"&format=json&polygon=1&addressdetails=1"
+            )
+            maps_r = json.load(client.get(maps_api))
+            lat = maps_r[0]["lat"]
+            lon = maps_r[0]["lon"]
+            bot.send_location(chat_id, lat, lon)
+    except:
+        log.error("Can't determine location")
 
 
-def send_media_message(parsing_result):
-    medias = []
-    for image in parsing_result["property_imgs"]:
-        medias.append(types.InputMediaPhoto(image))
-    bot.send_media_group(CHAT_ID, medias)
+def send_media_message(parsing_result, chat_id):
+    split_media_list = split_list_to_chunks(parsing_result["property_imgs"], 9)
+    delay = 30
+    for list_part in split_media_list:
+        medias = []
+        for image in list_part:
+            image_file_name = image.split('/')[-1]
+            local_file_path = f"/tmp/{image_file_name}"
+            with open(local_file_path, 'wb') as f:
+                with httpx.stream('GET', image) as r:
+                    for chunk in r.iter_bytes():
+                        f.write(chunk)
+            photo = open(local_file_path, 'rb')
+            medias.append(types.InputMediaPhoto(photo, image_file_name))
+        try:
+            bot.send_media_group(chat_id, medias, timeout=30)
+            sleep(delay)
+            delay += 30
+        except Exception as e:
+            log.error(e)
 
 
 @bot.message_handler(commands=["start"])
@@ -98,12 +120,15 @@ def send_welcome(message):
 @bot.channel_post_handler(func=lambda m: m.text is not None and "hemnet.se" in m.text)
 def parse_hemnet_link(message):
     if message.chat.id == CHAT_ID:
+        result = bot.send_message(message.chat.id, "Processing your link, please wait...")
         page_url = re.search("(?P<url>https?://[^\s]+)", message.text).group("url")
         log.info(f"{message.chat.id}: {message.text}; Extracted URL: {page_url}")
         parsing_result = parse_hemnet_page(page_url)
-        send_text_message(parsing_result)
-        send_location(parsing_result)
-        send_media_message(parsing_result)
+        log.info(parsing_result)
+        send_text_message(parsing_result, message.chat.id)
+        send_location(parsing_result, message.chat.id)
+        send_media_message(parsing_result, message.chat.id)
+        bot.delete_message(message.chat.id, result.message_id)
     else:
         bot.send_message(message.chat.id, "Sorry, this is a private bot")
 
