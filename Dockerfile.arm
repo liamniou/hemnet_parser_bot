@@ -1,14 +1,17 @@
 FROM python:3.8
 
 RUN apt-get update -y && apt-get install -y chromium \
-    build-essential libssl-dev libffi-dev python3-dev cargo rustc
+    build-essential libssl-dev libffi-dev python3-dev cargo rustc \
     # ^ these 6 are required for cryptography
 
 # Installing Chromedriver for Selenium
-RUN wget https://github.com/electron/electron/releases/download/v16.0.6/chromedriver-v16.0.6-linux-armv7l.zip && \
+    && wget https://github.com/electron/electron/releases/download/v16.0.6/chromedriver-v16.0.6-linux-armv7l.zip && \
     unzip chromedriver-v16.0.6-linux-armv7l.zip -d /tmp && mv /tmp/chromedriver /usr/local/bin && \
     chmod +x /usr/local/bin/chromedriver && \
-    rm chromedriver-v16.0.6-linux-armv7l.zip
+    rm chromedriver-v16.0.6-linux-armv7l.zip \
+# Cleanup
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get remove -y curl unzip
 
 WORKDIR /app
 
