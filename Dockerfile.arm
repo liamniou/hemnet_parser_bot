@@ -21,4 +21,4 @@ RUN pip3 install -r requirements.txt
 
 COPY ./app/*.py ./
 
-CMD ["python3", "hemnet_parser_bot.py"]
+CMD ["python3", "hemnet_parser.py"]

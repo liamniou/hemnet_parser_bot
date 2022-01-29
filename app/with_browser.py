@@ -8,7 +8,7 @@ from time import sleep
 chrome_options = Options()
 chrome_options.add_argument("--disable-extensions")
 chrome_options.add_argument("--disable-gpu")
-chrome_options.add_argument("--no-sandbox") # linux only
+chrome_options.add_argument("--no-sandbox")  # linux only
 chrome_options.add_argument("--headless")
 ACTION_PAUSE = int(os.getenv("ACTION_PAUSE", 3))
 
@@ -21,7 +21,8 @@ def open_page_find_images(url):
         sleep(ACTION_PAUSE)
         cookies_button = browser.find_element_by_css_selector(
             "body > div.ReactModalPortal > div > div > div > div > div > "
-            "div:nth-child(2) > div.consent__buttons > div:nth-child(2) > button")
+            "div:nth-child(2) > div.consent__buttons > div:nth-child(2) > button"
+        )
         cookies_button.click()
 
         gallery_button = browser.find_element_by_css_selector(
@@ -31,7 +32,8 @@ def open_page_find_images(url):
             "div.property-gallery__image-container > div > "
             "div.property-carousel.js-carousel-container.qa-carousel > div > "
             "div > div.gallery-carousel > div > div > div > div > ul > "
-            "li.slide.selected > button")
+            "li.slide.selected > button"
+        )
         gallery_button.click()
         sleep(ACTION_PAUSE)
 
