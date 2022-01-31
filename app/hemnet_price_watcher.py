@@ -21,15 +21,18 @@ def find_sold_items():
             )
             if result:
                 log.warning(f"{link} is sold, checking the final price...")
-                r = client.get(result["href"], headers=headers)
-                soup = BeautifulSoup(r.text, "html.parser")
-                final_price = soup.find("span", class_="sold-property__price-value").text
-                dd_diff = soup.find_all("dd", class_="sold-property__attribute-value")
-                for dd in dd_diff:
-                    if "%" in dd.text:
-                        diff = dd.text.strip()
-                send_tg_message(CHAT_ID, f"Sold for {final_price} ({diff})", item["message_id"])
-                update_in_collection({"href": link}, {"$set": {"sold_price": final_price}})
+                try:
+                    r = client.get(result["href"], headers=headers)
+                    soup = BeautifulSoup(r.text, "html.parser")
+                    final_price = soup.find("span", class_="sold-property__price-value").text
+                    dd_diff = soup.find_all("dd", class_="sold-property__attribute-value")
+                    for dd in dd_diff:
+                        if "%" in dd.text:
+                            diff = dd.text.strip()
+                    send_tg_message(CHAT_ID, f"Sold for {final_price} ({diff})", item["message_id"])
+                    update_in_collection({"href": link}, {"$set": {"sold_price": final_price}})
+                except:
+                    log.error(f"Can't find the final price for {link}")
 
 
 send_tg_message(ADMIN_CHAT_ID, f"Hemnet price watcher started")
