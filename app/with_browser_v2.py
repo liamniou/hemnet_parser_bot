@@ -41,6 +41,3 @@ def open_page_find_images(url):
                 image_links.append(src)
     finally:
         return image_links
-
-
-print(open_page_find_images("https://www.hemnet.se/bostad/lagenhet-3,5rum-djursholm-danderyds-kommun-viktor-rydbergs-vag-13a-19972965"))

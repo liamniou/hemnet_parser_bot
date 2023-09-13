@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   hemnet-parser-bot:
@@ -14,3 +14,18 @@ services:
       - CHAT_ID=${CHAT_ID}
       - MONGO_CONNECTION_STRING=${MONGO_CONNECTION_STRING}
       - PAGE_URL=${PAGE_URL}
+  hemnet-price-watcher:
+    privileged: true
+    container_name: hemnet-price-watcher
+    build:
+      context: .
+      dockerfile: Dockerfile.pricewatcher
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAPH_TOKEN=${TELEGRAPH_TOKEN}
+      - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
+      - CHAT_ID=${CHAT_ID}
+      - MONGO_CONNECTION_STRING=${MONGO_CONNECTION_STRING}
+      - PAGE_URL=${PAGE_URL}
+    depends_on:
+      - hemnet-parser-bot
