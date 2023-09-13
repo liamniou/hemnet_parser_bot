@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  hemnet-parser-bot:
+    privileged: true
+    container_name: hemnet-parser-bot
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAPH_TOKEN=${TELEGRAPH_TOKEN}
+      - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
+      - CHAT_ID=${CHAT_ID}
+      - MONGO_CONNECTION_STRING=${MONGO_CONNECTION_STRING}
+      - PAGE_URL=${PAGE_URL}

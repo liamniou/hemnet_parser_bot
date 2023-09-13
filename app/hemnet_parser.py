@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from dataclasses import dataclass, field
 from mongodb_functions import find_in_collection, insert_to_collection
 from telegraph_functions import upload_image_to_telegraph, create_telegraph_page
-from with_browser import open_page_find_images
+from with_browser_v2 import open_page_find_images
 
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")

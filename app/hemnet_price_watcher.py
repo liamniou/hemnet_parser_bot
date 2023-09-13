@@ -1,4 +1,5 @@
 import httpx
+import time
 from bs4 import BeautifulSoup
 from mongodb_functions import *
 from hemnet_parser import send_tg_message
@@ -31,6 +32,8 @@ def find_sold_items():
                             diff = dd.text.strip()
                     send_tg_message(CHAT_ID, f"Sold for {final_price} ({diff})", item["message_id"])
                     update_in_collection({"href": link}, {"$set": {"sold_price": final_price}})
+                    # Wait for 5 sec after sending the Telegram message to avoid API rate limiting
+                    time.sleep(5)
                 except:
                     log.error(f"Can't find the final price for {link}")
 
