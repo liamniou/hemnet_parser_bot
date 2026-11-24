@@ -1,6 +1,7 @@
 import io
 import logging
 import shutil
+import time
 
 from PIL import Image, ImageOps
 from sqlalchemy import or_, select
@@ -66,8 +67,24 @@ def archive_listing_images(listing_id: str) -> str:
 
 
 def disk_full() -> bool:
+    # Images may live on another disk (e.g. an NFS mount), so measure where they are stored.
     s = get_settings()
-    return shutil.disk_usage(s.data_dir).free < s.min_free_disk_gb * 1024**3
+    s.images_dir.mkdir(parents=True, exist_ok=True)
+    return shutil.disk_usage(s.images_dir).free < s.min_free_disk_gb * 1024**3
+
+
+_usage_cache: tuple[float, int] = (0.0, 0)
+
+
+def images_bytes(max_age: float = 600) -> int:
+    """Total archive size; cached, since walking every file is slow on network storage."""
+    global _usage_cache
+    now = time.monotonic()
+    if now - _usage_cache[0] > max_age or not _usage_cache[0]:
+        d = get_settings().images_dir
+        total = sum(f.stat().st_size for f in d.rglob("*.webp")) if d.exists() else 0
+        _usage_cache = (now, total)
+    return _usage_cache[1]
 
 
 def archive_pending(limit: int = 5) -> int:

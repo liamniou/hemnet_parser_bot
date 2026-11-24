@@ -192,3 +192,21 @@ def test_failing_region_backs_off_instead_of_retrying_every_minute(app_env, monk
         db.get(Region, rid).last_error_at = utcnow() - timedelta(minutes=31)
     scanner.run_due_scans()
     assert len(calls) == 2
+
+
+def test_disk_guard_measures_images_dir(app_env, monkeypatch):
+    import shutil
+    from collections import namedtuple
+
+    from app.config import get_settings
+
+    usage = namedtuple("usage", "total used free")
+    seen = []
+
+    def fake_usage(path):
+        seen.append(str(path))
+        return usage(100, 100, 0)
+
+    monkeypatch.setattr(shutil, "disk_usage", fake_usage)
+    assert images.disk_full() is True
+    assert seen == [str(get_settings().images_dir)]

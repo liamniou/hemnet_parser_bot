@@ -27,6 +27,7 @@ from app.schemas import (
     RegionUpdate,
 )
 from app.services import scanner
+from app.services.images import images_bytes
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(admin_user)])
 
@@ -180,10 +181,8 @@ def stats(db: Session = Depends(get_db)):
     notif = dict(
         db.execute(select(Notification.status, func.count()).group_by(Notification.status)).all()
     )
-    img_bytes = 0
-    if s.images_dir.exists():
-        img_bytes = sum(f.stat().st_size for f in s.images_dir.rglob("*.webp"))
-    disk = shutil.disk_usage(s.data_dir) if s.data_dir.exists() else None
+    img_bytes = images_bytes()
+    disk = shutil.disk_usage(s.images_dir) if s.images_dir.exists() else None
     return {
         "listings": by_status,
         "images": images,

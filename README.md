@@ -56,7 +56,7 @@ All of this runs inside one container (single uvicorn worker); data lives in `/d
 Sign-in emails are rate limited (one per address per minute, five per hour) and a code allows five attempts.
 
 See [.env.example](.env.example) for all settings (scan intervals, request delay, image size/quality,
-`MIN_FREE_DISK_GB` to pause image archiving when the disk fills up, …).
+`MIN_FREE_DISK_GB` to pause image archiving when the disk holding the images fills up, …).
 
 ### Sizing
 
