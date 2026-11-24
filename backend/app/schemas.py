@@ -9,31 +9,17 @@ class ORM(BaseModel):
 
 class UserOut(ORM):
     id: int
-    telegram_id: int
-    username: str | None
-    first_name: str | None
-    last_name: str | None
+    email: str
+    name: str | None
     display_name: str
     is_admin: bool
-    email: str | None
-    email_verified: bool
-    notify_telegram: bool
     notify_email: bool
-    telegram_blocked: bool
     created_at: datetime
 
 
 class UserUpdate(BaseModel):
-    notify_telegram: bool | None = None
+    name: str | None = Field(None, max_length=128)
     notify_email: bool | None = None
-
-
-class EmailIn(BaseModel):
-    email: str = Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=255)
-
-
-class CodeIn(BaseModel):
-    code: str
 
 
 class CriteriaIn(BaseModel):

@@ -80,9 +80,7 @@ function Editor({
     }
   };
 
-  const noChannel =
-    !(user.notify_telegram && !user.telegram_blocked && config.telegram_bot) &&
-    !(user.notify_email && user.email_verified);
+  const noChannel = !user.notify_email || !config.email_enabled;
 
   return (
     <div className="card editor">
@@ -113,7 +111,7 @@ function Editor({
         </p>
         {noChannel && (
           <p className="banner warn">
-            No notification channel is active. Enable Telegram or email in <Link to="/settings">Settings</Link>.
+            Email notifications are off. Turn them on in <Link to="/settings">Settings</Link>.
           </p>
         )}
       </fieldset>

@@ -38,7 +38,7 @@ export default function App() {
 
   useEffect(() => {
     api<AppConfig>("/api/config").then(setConfig).catch(() =>
-      setConfig({ telegram_bot: null, email_enabled: false, dev_login: false }),
+      setConfig({ email_enabled: false, dev_login: false }),
     );
     loadUser();
     setUnauthorizedHandler(() => setUser(null));
@@ -86,15 +86,6 @@ export default function App() {
             </button>
           </div>
         </header>
-        {user.telegram_blocked && user.notify_telegram && (
-          <div className="banner warn">
-            The bot can't message you (it was blocked or never started). Open{" "}
-            <a href={`https://t.me/${config.telegram_bot}`} target="_blank" rel="noreferrer">
-              @{config.telegram_bot}
-            </a>{" "}
-            and press Start to receive Telegram notifications.
-          </div>
-        )}
         <main>
           <Routes>
             <Route path="/" element={<Listings />} />

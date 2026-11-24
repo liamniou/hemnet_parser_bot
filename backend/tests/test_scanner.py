@@ -14,8 +14,8 @@ def _setup(region_types=("bostadsratt",)) -> int:
         region = Region(
             location_id="18031", name="Stockholms kommun", item_types=list(region_types)
         )
-        alice = User(telegram_id=1, first_name="Alice")
-        bob = User(telegram_id=2, first_name="Bob")
+        alice = User(email="alice@x.se", name="Alice")
+        bob = User(email="bob@x.se", name="Bob")
         db.add_all([region, alice, bob])
         db.flush()
         db.add(SavedSearch(user_id=alice.id, name="Cheap", price_max=4_000_000))
@@ -26,12 +26,12 @@ def _setup(region_types=("bostadsratt",)) -> int:
 def _notifications():
     with session_scope() as db:
         return [
-            (db.get(User, n.user_id).first_name, n.kind, n.listing_id)
+            (db.get(User, n.user_id).name, n.kind, n.listing_id)
             for n in db.scalars(select(Notification).order_by(Notification.id))
         ]
 
 
-def test_seed_then_incremental_announces_only_new_matches(app_env, tg):
+def test_seed_then_incremental_announces_only_new_matches(app_env, mail):
     rid = _setup()
     app_env.pages = [[make_card("1"), make_card("2")]]
     res = scanner.scan_region(rid)
@@ -52,12 +52,12 @@ def test_seed_then_incremental_announces_only_new_matches(app_env, tg):
     assert _notifications() == [("Alice", "new", "3")]
 
     notifications.dispatch_pending()
-    method, params = tg.sent[-1]
-    assert method == "sendPhoto" and params["chat_id"] == 1
-    assert "Gatan 1" in params["caption"] and "Cheap" in params["caption"]
+    msg = mail.sent[-1]
+    assert msg["to"] == "alice@x.se" and msg["subject"].startswith("New: Gatan 1")
+    assert "Cheap" in msg["html"] and "/listings/3" in msg["text"]
 
 
-def test_full_scan_price_drop_and_removal(app_env, tg):
+def test_full_scan_price_drop_and_removal(app_env, mail):
     rid = _setup()
     app_env.pages = [[make_card("1"), make_card("2")]]
     scanner.scan_region(rid)
@@ -79,7 +79,7 @@ def test_full_scan_price_drop_and_removal(app_env, tg):
     assert _notifications() == [("Bob", "price_drop", "1")]
 
 
-def test_sold_scan_notifies_previously_notified_users(app_env, tg):
+def test_sold_scan_notifies_previously_notified_users(app_env, mail):
     rid = _setup()
     app_env.pages = [[make_card("1")]]
     scanner.scan_region(rid)
@@ -87,7 +87,6 @@ def test_sold_scan_notifies_previously_notified_users(app_env, tg):
     scanner.scan_region(rid)
     scanner.fetch_details()
     notifications.dispatch_pending()
-    new_msg_id = len(tg.sent)
 
     app_env.sales = [
         SaleData("s5", "5", "slug", 3_700_000, "3 700 000 kr", 3_495_000, utcnow(), "+6 %"),
@@ -100,9 +99,8 @@ def test_sold_scan_notifies_previously_notified_users(app_env, tg):
     assert _notifications()[-1] == ("Alice", "sold", "5")
 
     notifications.dispatch_pending()
-    method, params = tg.sent[-1]
-    assert method == "sendMessage" and "Sold for 3 700 000 kr" in params["text"]
-    assert params["reply_parameters"]["message_id"] == new_msg_id
+    msg = mail.sent[-1]
+    assert msg["to"] == "alice@x.se" and "Sold for 3 700 000 kr" in msg["html"]
 
 
 def test_check_removed_detects_sale(app_env):
@@ -121,20 +119,26 @@ def test_check_removed_detects_sale(app_env):
         assert db.get(Listing, "1").status == "sold"
 
 
-def test_blocked_bot_marks_user(app_env, tg):
-    from app.services.telegram import TelegramError
-
+def test_failed_email_is_retried_then_given_up(app_env, mail):
     rid = _setup()
     app_env.pages = [[]]
     scanner.scan_region(rid)
     app_env.since_pages = [[make_card("7")]]
     scanner.scan_region(rid)
     scanner.fetch_details()
-    tg.fail_with = TelegramError("Forbidden: bot was blocked by the user", 403)
+    mail.fail_with = OSError("SMTP down")
     notifications.dispatch_pending()
     with session_scope() as db:
-        assert db.get(User, 1).telegram_blocked is True
-        assert db.scalars(select(Notification.status)).all() == ["failed"]
+        assert db.scalars(select(Notification.status)).all() == ["pending"]
+    for _ in range(notifications.MAX_ATTEMPTS):
+        notifications.dispatch_pending()
+    with session_scope() as db:
+        n = db.scalars(select(Notification)).one()
+        assert (n.status, n.attempts, n.error) == (
+            "failed",
+            notifications.MAX_ATTEMPTS,
+            "SMTP down",
+        )
 
 
 def test_archive_images_resizes_to_webp(app_env):
@@ -166,23 +170,3 @@ def test_full_scan_beyond_hemnet_cap_does_not_mark_removed(app_env):
     assert res.complete is False and res.removed == 0
     with session_scope() as db:
         assert db.get(Listing, "2").status == "active"
-
-
-def test_rate_limited_telegram_send_is_retried_not_failed(app_env, tg):
-    from app.services.telegram import TelegramError
-
-    rid = _setup()
-    app_env.pages = [[]]
-    scanner.scan_region(rid)
-    app_env.since_pages = [[make_card("7")]]
-    scanner.scan_region(rid)
-    scanner.fetch_details()
-    tg.fail_with = TelegramError("Too Many Requests: retry after 30", 429, 30)
-    for _ in range(notifications.MAX_ATTEMPTS + 1):
-        notifications.dispatch_pending()
-    with session_scope() as db:
-        assert db.scalars(select(Notification.status)).all() == ["pending"]
-    tg.fail_with = None
-    notifications.dispatch_pending()
-    with session_scope() as db:
-        assert db.scalars(select(Notification.status)).all() == ["sent"]

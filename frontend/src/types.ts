@@ -1,21 +1,14 @@
 export interface User {
   id: number;
-  telegram_id: number;
-  username: string | null;
-  first_name: string | null;
-  last_name: string | null;
+  email: string;
+  name: string | null;
   display_name: string;
   is_admin: boolean;
-  email: string | null;
-  email_verified: boolean;
-  notify_telegram: boolean;
   notify_email: boolean;
-  telegram_blocked: boolean;
   created_at: string;
 }
 
 export interface AppConfig {
-  telegram_bot: string | null;
   email_enabled: boolean;
   dev_login: boolean;
 }

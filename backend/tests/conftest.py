@@ -8,9 +8,8 @@ import pytest
 os.environ.update(
     {
         "SCHEDULER_ENABLED": "false",
-        "TELEGRAM_POLLING": "false",
-        "TELEGRAM_BOT_TOKEN": "",
         "SMTP_HOST": "",
+        "ADMIN_EMAILS": "",
         "SECRET_KEY": "test-secret-key-0123456789",
         "REQUEST_DELAY_SECONDS": "0",
     }
@@ -122,46 +121,46 @@ def app_env(tmp_path, monkeypatch):
     get_settings.cache_clear()
     from app.db import init_engine
     from app.hemnet import client as client_mod
-    from app.services import telegram
 
     init_engine(f"sqlite:///{tmp_path / 'test.db'}")
     fake = FakeHemnet()
     client_mod.set_client(fake)
-    telegram.set_api(None)
     yield fake
     client_mod.set_client(None)
-    telegram.set_api(None)
     get_settings.cache_clear()
 
 
-class FakeTelegram:
+class FakeMailer:
     def __init__(self) -> None:
-        self.sent: list[tuple[str, dict]] = []
-        self.fail_with = None
+        self.sent: list[dict] = []
+        self.fail_with: Exception | None = None
 
-    def call(self, method: str, **params: Any) -> Any:
+    def __call__(self, to: str, subject: str, html: str, text: str) -> None:
         if self.fail_with:
             raise self.fail_with
-        self.sent.append((method, params))
-        if method == "getMe":
-            return {"username": "hemnet_test_bot"}
-        return {"message_id": len(self.sent)}
+        self.sent.append({"to": to, "subject": subject, "html": html, "text": text})
 
-    def send_message(self, chat_id, text, **kw):
-        return self.call("sendMessage", chat_id=chat_id, text=text, **kw)
+    def last_code(self, to: str) -> str:
+        import re
 
-    def send_photo(self, chat_id, photo, caption, **kw):
-        return self.call("sendPhoto", chat_id=chat_id, photo=photo, caption=caption, **kw)
+        msg = next(m for m in reversed(self.sent) if m["to"] == to.strip().lower())
+        return re.search(r"code: (\d{6})", msg["subject"]).group(1)
+
+    def last_link_token(self, to: str) -> str:
+        import re
+
+        msg = next(m for m in reversed(self.sent) if m["to"] == to.strip().lower())
+        return re.search(r"token=([\w-]+)", msg["text"]).group(1)
 
 
 @pytest.fixture()
-def tg(app_env, monkeypatch):
+def mail(app_env, monkeypatch):
     from app.config import get_settings
-    from app.services import telegram
+    from app.services import emailer
 
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:abc")
-    monkeypatch.setenv("TELEGRAM_BOT_USERNAME", "hemnet_test_bot")
+    monkeypatch.setenv("SMTP_HOST", "smtp.test")
+    monkeypatch.setenv("SMTP_FROM", "Hemnet Watch <hw@test>")
     get_settings.cache_clear()
-    fake = FakeTelegram()
-    telegram.set_api(fake)
+    fake = FakeMailer()
+    monkeypatch.setattr(emailer, "send_email", fake)
     return fake

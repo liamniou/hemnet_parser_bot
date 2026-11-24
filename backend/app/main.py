@@ -9,17 +9,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import current_user
-from app.bot import BotPoller
 from app.config import get_settings
 from app.db import get_db, init_engine
 from app.models import Region, User
 from app.routers import admin, auth, listings, me, searches
 from app.schemas import RegionPublic
-from app.services import telegram
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logging.getLogger("apscheduler").setLevel(logging.ERROR)
-# httpx logs full request URLs at INFO, and Telegram URLs embed the bot token.
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("hemnet")
 
@@ -34,8 +31,6 @@ async def lifespan(app: FastAPI):
     init_engine(f"sqlite:///{s.db_path}")
     s.ensure_secret_key()
 
-    bot = BotPoller()
-    bot.start()
     sched = None
     if s.scheduler_enabled:
         from app.scheduler import build_scheduler
@@ -43,7 +38,6 @@ async def lifespan(app: FastAPI):
         sched = build_scheduler()
         sched.start()
     yield
-    bot.stop()
     if sched:
         sched.shutdown(wait=False)
 
@@ -62,7 +56,6 @@ def health():
 def config():
     s = get_settings()
     return {
-        "telegram_bot": telegram.bot_username() if s.telegram_enabled else None,
         "email_enabled": s.smtp_enabled,
         "dev_login": s.dev_login,
     }

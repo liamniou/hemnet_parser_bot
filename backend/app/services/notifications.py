@@ -16,7 +16,7 @@ from app.models import (
     UserListing,
     utcnow,
 )
-from app.services import emailer, telegram
+from app.services import emailer
 from app.services.matching import Criteria, matches
 
 log = logging.getLogger(__name__)
@@ -25,13 +25,7 @@ MAX_ATTEMPTS = 5
 
 
 def _channels(user: User) -> list[str]:
-    s = get_settings()
-    chans = []
-    if user.notify_telegram and not user.telegram_blocked and s.telegram_enabled:
-        chans.append("telegram")
-    if user.notify_email and user.email and user.email_verified and s.smtp_enabled:
-        chans.append("email")
-    return chans
+    return ["email"] if user.notify_email and get_settings().smtp_enabled else []
 
 
 def add_for_user(
@@ -154,7 +148,7 @@ def _photo_url(listing: Listing) -> str | None:
 
 
 def render(n: Notification) -> tuple[str, str, str]:
-    """Returns (subject, telegram/email html, plain text)."""
+    """Returns (subject, html, plain text)."""
     s = get_settings()
     listing = n.listing
     if listing is None:
@@ -210,40 +204,6 @@ def _email_html(body: str, listing: Listing | None) -> str:
 # ---------------------------------------------------------------- dispatch
 
 
-def _send_telegram(n: Notification, user: User, body: str) -> int | None:
-    api = telegram.get_api()
-    if api is None:
-        raise RuntimeError("Telegram is not configured")
-    reply_to = None
-    if n.kind in ("price_drop", "sold") and n.listing_id:
-        with session_scope() as db:
-            reply_to = db.scalar(
-                select(Notification.telegram_message_id).where(
-                    Notification.user_id == user.id,
-                    Notification.listing_id == n.listing_id,
-                    Notification.kind == "new",
-                    Notification.channel == "telegram",
-                    Notification.telegram_message_id.is_not(None),
-                )
-            )
-    kw: dict = {}
-    if reply_to:
-        kw["reply_parameters"] = {"message_id": reply_to, "allow_sending_without_reply": True}
-    if n.listing_id:
-        kw["reply_markup"] = {
-            "inline_keyboard": [[{"text": "⭐ Save", "callback_data": f"fav:{n.listing_id}"}]]
-        }
-    photo = _photo_url(n.listing) if n.listing and n.kind == "new" else None
-    if photo and len(body) <= 1024:
-        try:
-            return api.send_photo(user.telegram_id, photo, body, **kw)["message_id"]
-        except telegram.TelegramError as e:
-            if e.blocked:
-                raise
-            log.warning("sendPhoto failed, falling back to text: %s", e)
-    return api.send_message(user.telegram_id, body, **kw)["message_id"]
-
-
 def _claim(notification_id: int) -> bool:
     """Atomically move pending -> sending so concurrent dispatchers never double-send."""
     with session_scope() as db:
@@ -266,20 +226,8 @@ def send_notification(notification_id: int) -> None:
         subject, body, text = render(n)
         n.attempts += 1
         try:
-            if n.channel == "telegram":
-                n.telegram_message_id = _send_telegram(n, user, body)
-            else:
-                emailer.send_email(user.email, subject, _email_html(body, n.listing), text)
+            emailer.send_email(user.email, subject, _email_html(body, n.listing), text)
             n.status, n.sent_at, n.error = "sent", utcnow(), None
-        except telegram.TelegramError as e:
-            n.error = str(e)
-            if e.rate_limited:
-                n.attempts -= 1  # Flood control is not the message's fault; retry later.
-            elif e.blocked:
-                user.telegram_blocked = True
-                n.status = "failed"
-            elif n.attempts >= MAX_ATTEMPTS:
-                n.status = "failed"
         except Exception as e:
             log.exception("Notification %s failed", n.id)
             n.error = str(e)
@@ -306,13 +254,14 @@ def dispatch_pending(limit: int = 50) -> int:
 
 
 def notify_admins(text: str) -> None:
-    api = telegram.get_api()
-    if api is None:
+    if not get_settings().smtp_enabled:
         return
     with session_scope() as db:
-        admins = list(db.scalars(select(User.telegram_id).where(User.is_admin.is_(True))))
-    for chat_id in admins:
+        admins = list(
+            db.scalars(select(User.email).where(User.is_admin.is_(True), User.disabled.is_(False)))
+        )
+    for email in admins:
         try:
-            api.send_message(chat_id, text)
+            emailer.send_email(email, f"Hemnet Watch: {text[:80]}", html.escape(text), text)
         except Exception as e:
             log.warning("Admin notification failed: %s", e)

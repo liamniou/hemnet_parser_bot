@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { Send } from "lucide-react";
-import { api, ApiError } from "../api";
+import { useEffect, useState } from "react";
+import { Mail } from "lucide-react";
+import { api } from "../api";
 import type { AppConfig, User } from "../types";
 
 interface Props {
@@ -9,81 +9,131 @@ interface Props {
 }
 
 export default function Login({ config, onLogin }: Props) {
-  const [link, setLink] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [devId, setDevId] = useState("1");
-  const timer = useRef<number | null>(null);
 
-  useEffect(() => () => {
-    if (timer.current) window.clearInterval(timer.current);
+  const finish = (u: User) => {
+    window.history.replaceState(null, "", "/");
+    onLogin(u);
+  };
+
+  // Sign-in link from the email: /login?token=...
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("token");
+    if (!token) return;
+    setBusy(true);
+    api<{ user: User }>("/api/auth/email/link", { method: "POST", json: { token } })
+      .then((r) => finish(r.user))
+      .catch((e) => {
+        window.history.replaceState(null, "", "/");
+        setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => setBusy(false));
   }, []);
 
-  const start = async () => {
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
     setError(null);
-    const tab = window.open("about:blank", "_blank");
     try {
-      const res = await api<{ token: string; url: string }>("/api/auth/telegram", { method: "POST" });
-      setLink(res.url);
-      if (tab) {
-        tab.opener = null;
-        tab.location.href = res.url;
-      }
-      if (timer.current) window.clearInterval(timer.current);
-      timer.current = window.setInterval(async () => {
-        try {
-          const r = await api<{ status: string; user?: User }>(`/api/auth/telegram/${res.token}`);
-          if (r.status === "ok" && r.user) {
-            window.clearInterval(timer.current!);
-            onLogin(r.user);
-          }
-        } catch (e) {
-          window.clearInterval(timer.current!);
-          setLink(null);
-          setError(e instanceof ApiError && e.status === 410 ? "Login link expired, try again." : String(e));
-        }
-      }, 2000);
+      await fn();
     } catch (e) {
-      tab?.close();
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
     }
   };
 
-  const devLogin = async () => {
-    try {
-      onLogin(await api<User>(`/api/auth/dev-login?telegram_id=${devId}`, { method: "POST" }));
-    } catch (e) {
-      setError(String(e));
-    }
-  };
+  const sendCode = () =>
+    run(async () => {
+      await api("/api/auth/email", { method: "POST", json: { email } });
+      setSent(true);
+      setCode("");
+    });
+
+  const verify = () =>
+    run(async () => {
+      const r = await api<{ user: User }>("/api/auth/email/verify", { method: "POST", json: { email, code } });
+      finish(r.user);
+    });
+
+  const devLogin = () =>
+    run(async () => finish(await api<User>(`/api/auth/dev-login?email=${encodeURIComponent(email)}`, { method: "POST" })));
 
   return (
     <div className="login">
       <div className="card login-card">
         <h1>🏠 Hemnet Watch</h1>
         <p className="muted">
-          Archive of Hemnet listings with personal alerts for new ads, price drops and final sale
-          prices, delivered to Telegram or email.
+          Archive of Hemnet listings with personal email alerts for new ads, price drops and final sale prices.
         </p>
-        {config.telegram_bot ? (
-          <>
-            <button className="primary big" onClick={start}>
-              <Send size={18} /> Log in with Telegram
-            </button>
-            {link && (
-              <p className="hint">
-                Waiting for confirmation in Telegram… Press <b>Start</b> and then <b>Confirm login</b>{" "}
-                in the bot chat. If nothing opened, <a href={link} target="_blank" rel="noreferrer">open the bot</a>.
-              </p>
+        {!config.email_enabled && !config.dev_login ? (
+          <p className="banner warn">Email is not configured on the server (SMTP_HOST / SMTP_FROM).</p>
+        ) : !sent ? (
+          <form
+            className="login-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              sendCode();
+            }}
+          >
+            <input
+              type="email"
+              autoComplete="email"
+              autoFocus
+              required
+              placeholder="you@example.com"
+              aria-label="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            {config.email_enabled && (
+              <button className="primary big" disabled={busy || !email}>
+                <Mail size={18} /> Email me a sign-in code
+              </button>
             )}
-          </>
+            {config.dev_login && (
+              <button type="button" disabled={busy || !email} onClick={devLogin}>
+                Dev login
+              </button>
+            )}
+          </form>
         ) : (
-          <p className="banner warn">Telegram bot is not configured on the server (TELEGRAM_BOT_TOKEN).</p>
-        )}
-        {config.dev_login && (
-          <div className="row dev">
-            <input value={devId} onChange={(e) => setDevId(e.target.value)} placeholder="telegram id" />
-            <button onClick={devLogin}>Dev login</button>
-          </div>
+          <form
+            className="login-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              verify();
+            }}
+          >
+            <p>
+              We sent a 6-digit code to <b>{email}</b>. Enter it below, or click the link in the email.
+            </p>
+            <input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              maxLength={6}
+              placeholder="123456"
+              aria-label="Code"
+              className="code-input"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            />
+            <button className="primary big" disabled={busy || code.length !== 6}>
+              Sign in
+            </button>
+            <div className="row center-row">
+              <button type="button" className="link" onClick={() => setSent(false)}>
+                Use another email
+              </button>
+              <button type="button" className="link" disabled={busy} onClick={sendCode}>
+                Resend code
+              </button>
+            </div>
+          </form>
         )}
         {error && <p className="error">{error}</p>}
       </div>

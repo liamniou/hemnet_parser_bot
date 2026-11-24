@@ -2,7 +2,6 @@ from datetime import UTC, datetime
 
 from sqlalchemy import (
     JSON,
-    BigInteger,
     Boolean,
     DateTime,
     Float,
@@ -27,21 +26,11 @@ class User(Base):
     __table_args__ = {"sqlite_autoincrement": True}
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
-    username: Mapped[str | None] = mapped_column(String(64))
-    first_name: Mapped[str | None] = mapped_column(String(128))
-    last_name: Mapped[str | None] = mapped_column(String(128))
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    name: Mapped[str | None] = mapped_column(String(128))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     disabled: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    email: Mapped[str | None] = mapped_column(String(255))
-    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    email_code: Mapped[str | None] = mapped_column(String(16))
-    email_code_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
-
-    notify_telegram: Mapped[bool] = mapped_column(Boolean, default=True)
-    notify_email: Mapped[bool] = mapped_column(Boolean, default=False)
-    telegram_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    notify_email: Mapped[bool] = mapped_column(Boolean, default=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime)
@@ -52,17 +41,19 @@ class User(Base):
 
     @property
     def display_name(self) -> str:
-        name = " ".join(x for x in (self.first_name, self.last_name) if x)
-        return name or (f"@{self.username}" if self.username else str(self.telegram_id))
+        return self.name or self.email
 
 
 class LoginRequest(Base):
+    """An emailed sign-in: a 6-digit code (stored hashed) plus a link token."""
+
     __tablename__ = "login_requests"
 
     token: Mapped[str] = mapped_column(String(64), primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    approved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    email: Mapped[str] = mapped_column(String(255), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
     consumed: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
@@ -252,12 +243,11 @@ class Notification(Base):
         ForeignKey("saved_searches.id", ondelete="SET NULL")
     )
     kind: Mapped[str] = mapped_column(String(16))  # new | price_drop | sold | test
-    channel: Mapped[str] = mapped_column(String(16))  # telegram | email
+    channel: Mapped[str] = mapped_column(String(16), default="email")
     dedupe_key: Mapped[str] = mapped_column(String(255), unique=True)
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text)
-    telegram_message_id: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime)
 
