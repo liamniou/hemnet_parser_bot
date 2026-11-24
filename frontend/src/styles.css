@@ -328,3 +328,35 @@ legend { font-weight: 600; padding: 0 0.3rem; }
 .login-form button.big { justify-content: center; }
 .code-input { font-size: 1.6rem; letter-spacing: 0.4em; text-align: center; }
 .center-row { justify-content: center; gap: 1.2rem; }
+
+/* Colour-graded fact chips: --h is the hue chosen in components/Grading.tsx. */
+.facts { gap: 0.3rem; margin: 0.15rem 0; }
+.grade {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  background: hsl(var(--h) 85% 93%);
+  color: hsl(var(--h) 65% 26%);
+}
+.grade.neutral { background: color-mix(in srgb, var(--border) 60%, transparent); color: var(--text); }
+.grade.big { font-size: inherit; font-weight: 700; padding: 1px 8px; }
+@media (prefers-color-scheme: dark) {
+  .grade { background: hsl(var(--h) 45% 22%); color: hsl(var(--h) 80% 82%); }
+}
+.cover-type { position: absolute; bottom: 6px; left: 8px; }
+.type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+}
+.detail-head .type-badge { background: var(--info-bg); color: var(--primary); font-size: 0.85rem; margin-bottom: 0.4rem; }
+.leaflet-popup-content .facts { display: flex; flex-wrap: wrap; margin-top: 4px; }

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Heart, ImageIcon, TrendingDown } from "lucide-react";
 import type { ListingCard as Card } from "../types";
 import { date, kr, num, title } from "../format";
+import { GradeChip, PlainChip, RoomsChip, TypeBadge } from "./Grading";
 
 export function StatusBadge({ l }: { l: Pick<Card, "status" | "upcoming" | "new_construction"> }) {
   if (l.status === "sold") return <span className="badge sold">Sold</span>;
@@ -36,32 +37,48 @@ export default function ListingCardView({ l, onFavorite }: { l: Card; onFavorite
             <Heart size={18} fill={l.favorite ? "currentColor" : "none"} />
           </button>
         )}
+        <div className="cover-type">
+          <TypeBadge symbol={l.housing_form} name={l.housing_form_name} />
+        </div>
         {l.image_count > 1 && <span className="count">{l.image_count} 📷</span>}
       </div>
       <div className="body">
         <div className="price">
           {l.status === "sold" && l.sold_price ? (
             <>
-              {kr(l.sold_price)} <small className="muted">{l.sold_price_change}</small>
+              <GradeChip scale="price" value={l.sold_price} big>
+                {kr(l.sold_price)}
+              </GradeChip>{" "}
+              <small className="muted">{l.sold_price_change}</small>
             </>
           ) : (
-            l.asking_price_text || kr(l.asking_price)
+            <GradeChip scale="price" value={l.asking_price} big>
+              {l.asking_price_text || kr(l.asking_price)}
+            </GradeChip>
           )}
         </div>
         <div className="addr">{title(l)}</div>
         <div className="facts">
-          {l.rooms != null && <span>{num(l.rooms)} rum</span>}
+          {l.rooms != null && <RoomsChip rooms={l.rooms}>{num(l.rooms)} rum</RoomsChip>}
           {l.living_area != null && (
-            <span>
+            <PlainChip>
               {num(l.living_area)}
               {l.supplemental_area ? `+${num(l.supplemental_area)}` : ""} m²
-            </span>
+            </PlainChip>
           )}
-          {l.fee != null && <span>{kr(l.fee, " kr/mån")}</span>}
-          {l.sqm_price != null && <span>{kr(l.sqm_price, " kr/m²")}</span>}
+          {l.fee != null && (
+            <GradeChip scale="fee" value={l.fee}>
+              {kr(l.fee, " kr/mån")}
+            </GradeChip>
+          )}
+          {l.sqm_price != null && (
+            <GradeChip scale="sqm" value={l.sqm_price}>
+              {kr(l.sqm_price, " kr/m²")}
+            </GradeChip>
+          )}
         </div>
         <div className="meta muted small">
-          {l.housing_form_name} · published {date(l.published_at ?? l.first_seen_at)}
+          Published {date(l.published_at ?? l.first_seen_at)}
           {l.status === "sold" && l.sold_at && <> · sold {date(l.sold_at)}</>}
         </div>
       </div>

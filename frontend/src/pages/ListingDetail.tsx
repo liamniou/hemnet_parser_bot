@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, EyeOff, ExternalLink, Heart } fro
 import { MapContainer, Marker, TileLayer } from "react-leaflet";
 import { api } from "../api";
 import { StatusBadge } from "../components/ListingCard";
+import { GradeChip, RoomsChip, TypeBadge } from "../components/Grading";
 import { pinIcon } from "../components/mapIcons";
 import type { ListingDetail as Detail } from "../types";
 import { date, dateTime, kr, num, title } from "../format";
@@ -51,19 +52,18 @@ export default function ListingDetail() {
 
   const img = l.gallery[idx];
   const facts: [string, React.ReactNode][] = [
-    ["Asking price", l.asking_price_text || kr(l.asking_price)],
-    ["Rooms", num(l.rooms)],
+    ["Asking price", <GradeChip scale="price" value={l.asking_price}>{l.asking_price_text || kr(l.asking_price)}</GradeChip>],
+    ["Rooms", l.rooms != null ? <RoomsChip rooms={l.rooms}>{num(l.rooms)} rum</RoomsChip> : null],
     ["Living area", l.living_area ? `${num(l.living_area)} m²` : "–"],
     ["Supplemental area", l.supplemental_area ? `${num(l.supplemental_area)} m²` : null],
     ["Land area", l.land_area ? `${num(l.land_area)} m²` : null],
-    ["Fee", l.fee != null ? kr(l.fee, " kr/mån") : null],
+    ["Fee", l.fee != null ? <GradeChip scale="fee" value={l.fee}>{kr(l.fee, " kr/mån")}</GradeChip> : null],
     ["Running costs", l.running_costs != null ? kr(l.running_costs, " kr/år") : null],
-    ["Price / m²", l.sqm_price != null ? kr(l.sqm_price, " kr/m²") : null],
+    ["Price / m²", l.sqm_price != null ? <GradeChip scale="sqm" value={l.sqm_price}>{kr(l.sqm_price, " kr/m²")}</GradeChip> : null],
     ["Floor", l.floor],
     ["Year built", l.year_built],
     ["Balcony", l.has_balcony == null ? null : l.has_balcony ? "Yes" : "No"],
     ["Elevator", l.has_elevator == null ? null : l.has_elevator ? "Yes" : "No"],
-    ["Type", [l.housing_form_name, l.tenure].filter(Boolean).join(" · ")],
     ["Energy class", l.energy_class],
     ["Association", l.brf_name],
     ["Broker", [l.broker_name, l.broker_agency].filter(Boolean).join(", ")],
@@ -84,16 +84,22 @@ export default function ListingDetail() {
           <h1>
             {title(l)} <StatusBadge l={l} />
           </h1>
+          <TypeBadge symbol={l.housing_form} name={[l.housing_form_name, l.tenure].filter(Boolean).join(" · ")} />
           <div className="price big">
             {l.status === "sold" ? (
               <>
-                Sold for {l.sold_price_text || kr(l.sold_price)}{" "}
+                Sold for{" "}
+                <GradeChip scale="price" value={l.sold_price} big>
+                  {l.sold_price_text || kr(l.sold_price)}
+                </GradeChip>{" "}
                 <span className="muted">
                   {l.sold_price_change} · {date(l.sold_at)}
                 </span>
               </>
             ) : (
-              l.asking_price_text || kr(l.asking_price)
+              <GradeChip scale="price" value={l.asking_price} big>
+                {l.asking_price_text || kr(l.asking_price)}
+              </GradeChip>
             )}
           </div>
         </div>
