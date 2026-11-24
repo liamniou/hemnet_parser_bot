@@ -1,0 +1,13 @@
+services:
+  hemnet-watch:
+    build: .
+    image: ghcr.io/liamniou/hemnet_parser_bot:latest
+    container_name: hemnet-watch
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    security_opt:
+      - no-new-privileges:true
