@@ -273,7 +273,9 @@ def send_notification(notification_id: int) -> None:
             n.status, n.sent_at, n.error = "sent", utcnow(), None
         except telegram.TelegramError as e:
             n.error = str(e)
-            if e.blocked:
+            if e.rate_limited:
+                n.attempts -= 1  # Flood control is not the message's fault; retry later.
+            elif e.blocked:
                 user.telegram_blocked = True
                 n.status = "failed"
             elif n.attempts >= MAX_ATTEMPTS:
