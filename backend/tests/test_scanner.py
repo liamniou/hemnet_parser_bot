@@ -210,3 +210,20 @@ def test_disk_guard_measures_images_dir(app_env, monkeypatch):
     monkeypatch.setattr(shutil, "disk_usage", fake_usage)
     assert images.disk_full() is True
     assert seen == [str(get_settings().images_dir)]
+
+
+def test_hidden_listing_sends_no_followups(app_env, mail):
+    rid = _setup()
+    app_env.pages = [[make_card("1")]]
+    scanner.scan_region(rid)
+    app_env.since_pages = [[make_card("5")]]
+    scanner.scan_region(rid)
+    scanner.fetch_details()
+    assert _notifications() == [("Alice", "new", "5")]
+    with session_scope() as db:
+        db.add(UserListing(user_id=1, listing_id="5", hidden=True))
+    app_env.sales = [
+        SaleData("s5", "5", "slug", 3_700_000, "3 700 000 kr", 3_495_000, utcnow(), "+6 %")
+    ]
+    assert scanner.scan_sold(rid) == 1
+    assert _notifications() == [("Alice", "new", "5")]

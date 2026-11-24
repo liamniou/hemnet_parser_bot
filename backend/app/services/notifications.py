@@ -102,8 +102,17 @@ def enqueue_followup(db: Session, listing: Listing, kind: str, ref: str = "") ->
     ):
         recipients.setdefault(user_id, None)
 
+    hidden_by = set(
+        db.scalars(
+            select(UserListing.user_id).where(
+                UserListing.listing_id == listing.id, UserListing.hidden.is_(True)
+            )
+        )
+    )
     added = 0
     for user_id, search_id in recipients.items():
+        if user_id in hidden_by:
+            continue
         user = db.get(User, user_id)
         if user and not user.disabled:
             added += add_for_user(db, user, listing.id, kind, search_id, ref)

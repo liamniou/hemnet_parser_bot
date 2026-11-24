@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import current_user
 from app.db import get_db
-from app.models import Listing, ListingRegion, Region, SavedSearch, User, UserListing
+from app.models import Listing, ListingRegion, Region, User, UserListing
 from app.schemas import (
     ImageOut,
     ListingDetailOut,
@@ -15,7 +15,6 @@ from app.schemas import (
     PriceChangeOut,
 )
 from app.services import browse
-from app.services.matching import Criteria
 
 router = APIRouter(prefix="/api/listings", tags=["listings"])
 
@@ -28,15 +27,10 @@ def query(q: ListingQuery, user: User = Depends(current_user), db: Session = Dep
 
 @router.post("/map", response_model=list[MapPoint])
 def map_points(q: ListingQuery, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    q = q.model_copy(update={"page": 1, "page_size": 100})
-    if q.search_id:
-        s = db.get(SavedSearch, q.search_id)
-        if s is None or s.user_id != user.id:
-            raise HTTPException(404)
-        crit = Criteria.from_search(s)
-    else:
-        crit = browse.criteria_from(q)
-    listings = browse.filter_listings(db, crit, q.status, q.text)
+    found = browse.user_listings(db, user.id, q)
+    if found is None:
+        raise HTTPException(404)
+    listings, _ = found
     return [
         MapPoint(
             id=x.id,

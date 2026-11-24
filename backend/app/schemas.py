@@ -65,7 +65,8 @@ class ListingQuery(CriteriaIn):
     status: str = "active"  # active | sold | removed | all
     search_id: int | None = None
     favorites_only: bool = False
-    show_hidden: bool = False
+    show_hidden: bool = False  # include hidden listings among the others
+    hidden_only: bool = False  # only the listings this user has hidden
     text: str | None = None
     sort: str = (
         "newest"  # newest | price_asc | price_desc | sqm_price_asc | area_desc | sold_recent

@@ -55,6 +55,7 @@ export interface ListingQuery extends Criteria {
   search_id: number | null;
   favorites_only: boolean;
   show_hidden: boolean;
+  hidden_only: boolean;
   text: string | null;
   sort: string;
   page: number;
