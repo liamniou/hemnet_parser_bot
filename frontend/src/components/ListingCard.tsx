@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Heart, ImageIcon, TrendingDown } from "lucide-react";
+import { Eye, EyeOff, Heart, ImageIcon, TrendingDown } from "lucide-react";
 import type { ListingCard as Card } from "../types";
 import { date, kr, num, title } from "../format";
 import { GradeChip, PlainChip, RoomsChip, TypeBadge } from "./Grading";
@@ -15,11 +15,12 @@ export function StatusBadge({ l }: { l: Pick<Card, "status" | "upcoming" | "new_
 interface Props {
   l: Card;
   onFavorite?: (l: Card) => void;
+  onHide?: (l: Card) => void;
   onHover?: (id: string | null) => void;
   highlighted?: boolean;
 }
 
-export default function ListingCardView({ l, onFavorite, onHover, highlighted }: Props) {
+export default function ListingCardView({ l, onFavorite, onHide, onHover, highlighted }: Props) {
   return (
     <Link
       to={`/listings/${l.id}`}
@@ -37,18 +38,34 @@ export default function ListingCardView({ l, onFavorite, onHover, highlighted }:
             </span>
           )}
         </div>
-        {onFavorite && (
-          <button
-            className={`fav ${l.favorite ? "on" : ""}`}
-            title={l.favorite ? "Remove from saved" : "Save"}
-            onClick={(e) => {
-              e.preventDefault();
-              onFavorite(l);
-            }}
-          >
-            <Heart size={18} fill={l.favorite ? "currentColor" : "none"} />
-          </button>
-        )}
+        <div className="card-actions">
+          {onHide && (
+            <button
+              className="card-action hide"
+              title={l.hidden ? "Unhide" : "Hide (only for you)"}
+              aria-label={l.hidden ? "Unhide" : "Hide"}
+              onClick={(e) => {
+                e.preventDefault();
+                onHide(l);
+              }}
+            >
+              {l.hidden ? <Eye size={18} /> : <EyeOff size={18} />}
+            </button>
+          )}
+          {onFavorite && (
+            <button
+              className={`card-action fav ${l.favorite ? "on" : ""}`}
+              title={l.favorite ? "Remove from saved" : "Save"}
+              aria-label={l.favorite ? "Remove from saved" : "Save"}
+              onClick={(e) => {
+                e.preventDefault();
+                onFavorite(l);
+              }}
+            >
+              <Heart size={18} fill={l.favorite ? "currentColor" : "none"} />
+            </button>
+          )}
+        </div>
         <div className="cover-type">
           <TypeBadge symbol={l.housing_form} name={l.housing_form_name} />
         </div>

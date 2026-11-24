@@ -18,6 +18,7 @@ const defaultQuery = (): ListingQuery => ({
   search_id: null,
   favorites_only: false,
   show_hidden: false,
+  hidden_only: false,
   text: null,
   sort: "newest",
   page: 1,
@@ -55,6 +56,7 @@ export default function Listings() {
     setViewState(v);
   };
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +75,7 @@ export default function Listings() {
       .then(setPage)
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
-  }, [query, view]);
+  }, [query, view, reloadKey]);
 
   // Only the full map shows every result; the split map shows the current page.
   const pointsKey = JSON.stringify({ ...query, page: 1 });
@@ -121,10 +123,34 @@ export default function Listings() {
     );
   };
 
+  const [undo, setUndo] = useState<ListingCard | null>(null);
+  const setHidden = async (l: ListingCard, hidden: boolean) => {
+    await api(`/api/listings/${l.id}/state`, { method: "PUT", json: { hidden } });
+    setPage((p) => {
+      if (!p) return p;
+      // Hiding removes a card from the normal list; unhiding removes it from the "Hidden" list.
+      if (hidden !== query.hidden_only) {
+        return { ...p, items: p.items.filter((x) => x.id !== l.id), total: p.total - 1 };
+      }
+      return { ...p, items: p.items.map((x) => (x.id === l.id ? { ...x, hidden } : x)) };
+    });
+    // Undo of a card that already left the list: reload so it returns to its place.
+    if (!hidden && !query.hidden_only && page && !page.items.some((x) => x.id === l.id)) {
+      setReloadKey((k) => k + 1);
+    }
+    if (hoveredId === l.id) setHoveredId(null);
+    setUndo(hidden ? l : null);
+  };
+  useEffect(() => {
+    if (!undo) return;
+    const t = window.setTimeout(() => setUndo(null), 8000);
+    return () => window.clearTimeout(t);
+  }, [undo]);
+
   const saveAsSearch = async () => {
     const name = window.prompt("Name for this search:", "My search");
     if (!name) return;
-    const { status: _s, search_id: _i, favorites_only: _f, show_hidden: _h, text: _t, sort: _o, page: _p, page_size: _z, ...criteria } = query;
+    const { status: _s, search_id: _i, favorites_only: _f, show_hidden: _h, hidden_only: _ho, text: _t, sort: _o, page: _p, page_size: _z, ...criteria } = query;
     await api("/api/searches", { method: "POST", json: { ...criteria, name } });
     navigate("/searches");
   };
@@ -181,8 +207,8 @@ export default function Listings() {
         <label className="inline">
           <input
             type="checkbox"
-            checked={query.show_hidden}
-            onChange={(e) => update({ show_hidden: e.target.checked })}
+            checked={query.hidden_only}
+            onChange={(e) => update({ hidden_only: e.target.checked, show_hidden: false })}
           />{" "}
           Hidden
         </label>
@@ -234,6 +260,14 @@ export default function Listings() {
       )}
 
       {error && <p className="error">{error}</p>}
+      {undo && (
+        <div className="toast" role="status">
+          Hidden <b>{undo.street_address ?? "listing"}</b>. You can find it under “Hidden”.
+          <button className="link" onClick={() => setHidden(undo, false)}>
+            Undo
+          </button>
+        </div>
+      )}
 
       {view === "map" ? (
         <>
@@ -260,6 +294,7 @@ export default function Listings() {
                     key={l.id}
                     l={l}
                     onFavorite={toggleFavorite}
+                    onHide={(x) => setHidden(x, !x.hidden)}
                     onHover={view === "split" ? setHoveredId : undefined}
                     highlighted={view === "split" && hoveredId === l.id}
                   />

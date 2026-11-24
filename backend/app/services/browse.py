@@ -75,11 +75,17 @@ def to_card(listing: Listing, state: UserListing | None, dropped: bool) -> Listi
     return card
 
 
-def query_listings(db: Session, user_id: int, q: ListingQuery) -> tuple[list[ListingCardOut], int]:
+def user_listings(
+    db: Session, user_id: int, q: ListingQuery
+) -> tuple[list[Listing], dict[str, UserListing]] | None:
+    """Listings matching the query, filtered by this user's saved/hidden state.
+
+    Returns None when the query references someone else's (or a missing) saved search.
+    """
     if q.search_id:
         search = db.get(SavedSearch, q.search_id)
         if search is None or search.user_id != user_id:
-            return [], 0
+            return None
         crit = Criteria.from_search(search)
     else:
         crit = criteria_from(q)
@@ -89,10 +95,24 @@ def query_listings(db: Session, user_id: int, q: ListingQuery) -> tuple[list[Lis
         s.listing_id: s
         for s in db.scalars(select(UserListing).where(UserListing.user_id == user_id))
     }
+
+    def hidden(x: Listing) -> bool:
+        return bool((st := states.get(x.id)) and st.hidden)
+
     if q.favorites_only:
         listings = [x for x in listings if (st := states.get(x.id)) and st.favorite]
-    if not q.show_hidden:
-        listings = [x for x in listings if not ((st := states.get(x.id)) and st.hidden)]
+    if q.hidden_only:
+        listings = [x for x in listings if hidden(x)]
+    elif not q.show_hidden:
+        listings = [x for x in listings if not hidden(x)]
+    return listings, states
+
+
+def query_listings(db: Session, user_id: int, q: ListingQuery) -> tuple[list[ListingCardOut], int]:
+    found = user_listings(db, user_id, q)
+    if found is None:
+        return [], 0
+    listings, states = found
 
     listings.sort(key=_SORTS.get(q.sort, _SORTS["newest"]))
     total = len(listings)
