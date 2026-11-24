@@ -170,3 +170,25 @@ def test_full_scan_beyond_hemnet_cap_does_not_mark_removed(app_env):
     assert res.complete is False and res.removed == 0
     with session_scope() as db:
         assert db.get(Listing, "2").status == "active"
+
+
+def test_failing_region_backs_off_instead_of_retrying_every_minute(app_env, monkeypatch):
+    rid = _setup()
+    app_env.pages = [[make_card("1")]]
+    scanner.scan_region(rid)
+    calls = []
+
+    def boom(*a, **kw):
+        calls.append(1)
+        raise RuntimeError("hemnet changed")
+
+    monkeypatch.setattr(app_env, "search", boom)
+    with session_scope() as db:
+        db.get(Region, rid).last_scan_at = utcnow() - timedelta(days=1)
+    scanner.run_due_scans()
+    scanner.run_due_scans()
+    assert len(calls) == 1
+    with session_scope() as db:
+        db.get(Region, rid).last_error_at = utcnow() - timedelta(minutes=31)
+    scanner.run_due_scans()
+    assert len(calls) == 2

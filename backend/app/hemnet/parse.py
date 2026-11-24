@@ -14,7 +14,10 @@ from typing import Any
 _PUSH_RE = re.compile(r"self\.__next_f\.push\((\[.*?\])\)</script>", re.S)
 _NUM_RE = re.compile(r"\d+(?:[.,]\d+)?")
 _TEXT_ROW_RE = re.compile(r"(?:^|\n)([0-9a-f]+):T([0-9a-f]+),")
-_REF_RE = re.compile(r"^\$([0-9a-f]+)$")
+_JSON_ROW_RE = re.compile(r"(?:^|\n)([0-9a-f]+):(?=[\[{\"])")
+# "$<row>" or "$<row>:<key>:<index>:..." (a path into an already-streamed row).
+_REF_RE = re.compile(r"^\$([0-9a-f]+)((?::[^:]+)*)$")
+_ELEMENT_FIELDS = {"type": "1", "key": "2", "props": "3"}
 
 
 class ParseError(Exception):
@@ -33,29 +36,73 @@ def extract_rsc(html: str) -> str:
     return "".join(out)
 
 
-def text_rows(payload: str) -> dict[str, str]:
-    """Long strings are streamed as separate rows ``<id>:T<byte length hex>,<text>`` and
-    referenced from JSON as ``"$<id>"``."""
-    rows: dict[str, str] = {}
-    for m in _TEXT_ROW_RE.finditer(payload):
-        length = int(m.group(2), 16)
-        raw = payload[m.end() : m.end() + length].encode()[:length]
-        rows[m.group(1)] = raw.decode("utf-8", errors="ignore")
-    return rows
+class Rows:
+    """The rows of an RSC payload, used to resolve references between them.
 
+    Long strings are streamed as ``<id>:T<byte length hex>,<text>`` and JSON as ``<id>:<json>``.
+    JSON values reference them as ``"$<id>"``; repeated objects are deduplicated into path
+    references such as ``"$3b:4:props:result:card:housingForm"``.
+    """
 
-def resolve_refs(obj: Any, rows: dict[str, str]) -> Any:
-    if isinstance(obj, str):
-        if obj.startswith("$$"):
-            return obj[1:]
-        if (m := _REF_RE.match(obj)) and m.group(1) in rows:
-            return rows[m.group(1)]
+    def __init__(self, payload: str):
+        self.payload = payload
+        self.text: dict[str, str] = {}
+        for m in _TEXT_ROW_RE.finditer(payload):
+            length = int(m.group(2), 16)
+            raw = payload[m.end() : m.end() + length].encode()[:length]
+            self.text[m.group(1)] = raw.decode("utf-8", errors="ignore")
+        self._json_pos = {m.group(1): m.end() for m in _JSON_ROW_RE.finditer(payload)}
+        self._json: dict[str, Any] = {}
+
+    def json_row(self, row_id: str) -> Any:
+        if row_id not in self._json:
+            pos = self._json_pos.get(row_id)
+            value = None
+            if pos is not None:
+                try:
+                    value, _ = json.JSONDecoder().raw_decode(self.payload, pos)
+                except json.JSONDecodeError:
+                    value = None
+            self._json[row_id] = value
+        return self._json[row_id]
+
+    def lookup(self, row_id: str, path: list[str], depth: int) -> Any:
+        if not path and row_id in self.text:
+            return self.text[row_id]
+        node = self.json_row(row_id)
+        for key in path:
+            node = self.resolve(node, depth + 1, shallow=True)
+            # React elements are streamed as ["$", type, key, props].
+            if isinstance(node, list) and node[:1] == ["$"] and key in _ELEMENT_FIELDS:
+                key = _ELEMENT_FIELDS[key]
+            if isinstance(node, dict):
+                node = node.get(key)
+            elif isinstance(node, list) and key.isdigit() and int(key) < len(node):
+                node = node[int(key)]
+            else:
+                return None
+        return node
+
+    def resolve(self, obj: Any, depth: int = 0, shallow: bool = False) -> Any:
+        if depth > 50:
+            return obj
+        if isinstance(obj, str):
+            if obj.startswith("$$"):
+                return obj[1:]
+            m = _REF_RE.match(obj)
+            if not m:
+                return obj
+            target = self.lookup(m.group(1), [p for p in m.group(2).split(":") if p], depth)
+            if target is None:
+                return obj
+            return target if shallow else self.resolve(target, depth + 1)
+        if shallow:
+            return obj
+        if isinstance(obj, list):
+            return [self.resolve(x, depth + 1) for x in obj]
+        if isinstance(obj, dict):
+            return {k: self.resolve(v, depth + 1) for k, v in obj.items()}
         return obj
-    if isinstance(obj, list):
-        return [resolve_refs(x, rows) for x in obj]
-    if isinstance(obj, dict):
-        return {k: resolve_refs(v, rows) for k, v in obj.items()}
-    return obj
 
 
 def find_objects(payload: str, typename: str) -> list[dict[str, Any]]:
@@ -166,10 +213,23 @@ class CardData:
         return True if "ELEVATOR" in self.labels else None
 
 
+def _dict(v: Any) -> dict[str, Any]:
+    return v if isinstance(v, dict) else {}
+
+
+def _list(v: Any) -> list[Any]:
+    return v if isinstance(v, list) else []
+
+
+def _text(v: Any) -> str | None:
+    """Strings, minus unresolved RSC references."""
+    return v if isinstance(v, str) and not _REF_RE.match(v) else None
+
+
 def parse_card(c: dict[str, Any]) -> CardData:
-    living, supplemental = parse_areas(c.get("livingAndSupplementalAreas"))
-    coords = c.get("coordinates") or {}
-    hf = c.get("housingForm") or {}
+    living, supplemental = parse_areas(_text(c.get("livingAndSupplementalAreas")))
+    coords = _dict(c.get("coordinates"))
+    hf = _dict(c.get("housingForm"))
     return CardData(
         id=str(c["id"]),
         slug=c.get("slug") or str(c["id"]),
@@ -189,14 +249,14 @@ def parse_card(c: dict[str, Any]) -> CardData:
         land_area=parse_number(c.get("landArea")),
         rooms=parse_number(c.get("rooms")),
         floor=c.get("floor"),
-        labels=[lb["identifier"] for lb in c.get("labels") or [] if lb.get("identifier")],
+        labels=[lb["identifier"] for lb in _list(c.get("labels")) if _dict(lb).get("identifier")],
         new_construction=bool(c.get("newConstruction")) or c.get("recordType") == "PROJECT",
         upcoming=bool(c.get("upcoming")),
         published_at=parse_ts(c.get("publishedAt")),
         broker_name=c.get("brokerName"),
         broker_agency=c.get("brokerAgencyName"),
         description=c.get("description"),
-        thumbnails=[t for t in c.get("thumbnails") or [] if isinstance(t, str)],
+        thumbnails=[t for t in _list(c.get("thumbnails")) if _text(t)],
     )
 
 
@@ -211,7 +271,7 @@ def parse_search(html: str) -> SearchPage:
     results = [o for o in find_objects(payload, "ListingResultsCombined") if "cards" in o]
     if not results:
         raise ParseError("ListingResultsCombined not found in search page")
-    res = resolve_refs(max(results, key=lambda o: len(o.get("cards") or [])), text_rows(payload))
+    res = Rows(payload).resolve(max(results, key=lambda o: len(o.get("cards") or [])))
     cards = [parse_card(c) for c in res.get("cards") or [] if isinstance(c, dict) and c.get("id")]
     return SearchPage(total=int(res.get("total") or 0), cards=cards)
 
@@ -302,7 +362,7 @@ def parse_detail(html: str, listing_id: str) -> DetailData:
     payload = extract_rsc(html)
     active = _richest(find_objects(payload, "ActivePropertyListing"), id=listing_id)
     if active and len(active) > 10:
-        active = resolve_refs(active, text_rows(payload))
+        active = Rows(payload).resolve(active)
         coords = active.get("coordinates") or {}
         hf = active.get("housingForm") or {}
         municipality = active.get("municipality") or {}

@@ -407,17 +407,23 @@ def run_due_scans() -> None:
     now = utcnow()
     with session_scope() as db:
         regions = db.execute(
-            select(Region.id, Region.last_scan_at, Region.last_sold_scan_at, Region.seeded).where(
-                Region.enabled.is_(True)
-            )
+            select(
+                Region.id,
+                Region.last_scan_at,
+                Region.last_sold_scan_at,
+                Region.seeded,
+                Region.last_error_at,
+            ).where(Region.enabled.is_(True))
         ).all()
-    for rid, last_scan, last_sold, seeded in regions:
+    interval = timedelta(minutes=s.scan_interval_minutes)
+    # A failing region retries at most every 30 min (or the scan interval, if shorter).
+    retry_after = min(interval, timedelta(minutes=30))
+    for rid, last_scan, last_sold, seeded, last_error_at in regions:
+        if last_error_at and (last_scan is None or last_error_at > last_scan):
+            if now - last_error_at < retry_after:
+                continue
         try:
-            if (
-                not seeded
-                or last_scan is None
-                or now - last_scan >= timedelta(minutes=s.scan_interval_minutes)
-            ):
+            if not seeded or last_scan is None or now - last_scan >= interval:
                 scan_region(rid)
             if seeded and (
                 last_sold is None or now - last_sold >= timedelta(hours=s.sold_scan_hours)
