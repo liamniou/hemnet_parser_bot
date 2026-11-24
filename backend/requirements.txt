@@ -1,0 +1,9 @@
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
+sqlalchemy==2.1.9
+pydantic-settings==2.16.3
+curl_cffi==0.17.0
+httpx==0.28.1
+apscheduler==3.11.3
+itsdangerous==2.2.0
+pillow==13.0.0

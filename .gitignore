@@ -130,3 +130,8 @@ dmypy.json
 
 # Pycharm
 .idea/
+# App
+node_modules/
+frontend/dist/
+/data/
+*.tsbuildinfo
