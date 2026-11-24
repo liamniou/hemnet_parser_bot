@@ -97,4 +97,9 @@ def set_state(
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(state, k, v)
     db.commit()
-    return {"favorite": state.favorite, "hidden": state.hidden, "note": state.note}
+    return {
+        "favorite": state.favorite,
+        "hidden": state.hidden,
+        "subscribed": bool(state.subscribed),
+        "note": state.note,
+    }

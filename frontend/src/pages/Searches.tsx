@@ -37,6 +37,7 @@ function summary(s: SavedSearch, regions: Region[]): string {
   if (s.require_balcony) parts.push("balcony");
   if (s.require_elevator) parts.push("elevator");
   if (s.radius_km) parts.push(`within ${s.radius_km} km`);
+  if (s.water_distance_max) parts.push(`water ≤ ${s.water_distance_max} m`);
   if (s.keywords) parts.push(`“${s.keywords}”`);
   return parts.join(" · ");
 }

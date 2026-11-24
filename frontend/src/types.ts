@@ -34,6 +34,7 @@ export interface Criteria {
   center_lat: number | null;
   center_lon: number | null;
   radius_km: number | null;
+  water_distance_max: number | null;
 }
 
 export interface SavedSearch extends Criteria {
@@ -54,6 +55,7 @@ export interface ListingQuery extends Criteria {
   status: ListingStatus;
   search_id: number | null;
   favorites_only: boolean;
+  subscribed_only: boolean;
   show_hidden: boolean;
   hidden_only: boolean;
   text: string | null;
@@ -99,6 +101,7 @@ export interface ListingCard {
   photos: string[];
   price_dropped: boolean;
   favorite: boolean;
+  subscribed: boolean;
   hidden: boolean;
 }
 
@@ -228,4 +231,5 @@ export const emptyCriteria = (): Criteria => ({
   center_lat: null,
   center_lon: null,
   radius_km: null,
+  water_distance_max: null,
 });

@@ -81,6 +81,7 @@ def to_card(listing: Listing, state: UserListing | None, dropped: bool) -> Listi
     card.price_dropped = dropped
     if state:
         card.favorite, card.hidden = state.favorite, state.hidden
+        card.subscribed = bool(state.subscribed)
     return card
 
 
@@ -110,6 +111,8 @@ def user_listings(
 
     if q.favorites_only:
         listings = [x for x in listings if (st := states.get(x.id)) and st.favorite]
+    if q.subscribed_only:
+        listings = [x for x in listings if (st := states.get(x.id)) and st.subscribed]
     if q.hidden_only:
         listings = [x for x in listings if hidden(x)]
     elif not q.show_hidden:

@@ -68,3 +68,11 @@ def test_radius():
     assert matches(near, lst, [])
     assert not matches(far, lst, [])
     assert not matches(near, _listing(lat=None, lon=None), [])
+
+
+def test_water_distance_max_excludes_far_and_unknown():
+    c = Criteria(water_distance_max=300)
+    assert matches(c, _listing(water_distance=250), [])
+    assert not matches(c, _listing(water_distance=800), [])
+    assert not matches(c, _listing(water_distance=None), [])
+    assert matches(Criteria(), _listing(water_distance=None), [])

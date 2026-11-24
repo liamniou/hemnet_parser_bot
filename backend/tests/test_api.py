@@ -122,6 +122,11 @@ def test_searches_listings_and_ownership(app_env, mail):
     assert alice.put("/api/listings/2/state", json={"hidden": True}).status_code == 200
     page = alice.post("/api/listings/query", json={}).json()
     assert [x["id"] for x in page["items"]] == ["1"]
+    r = alice.put("/api/listings/1/state", json={"subscribed": True})
+    assert r.json()["subscribed"] is True
+    page = alice.post("/api/listings/query", json={"subscribed_only": True}).json()
+    assert [(x["id"], x["subscribed"]) for x in page["items"]] == [("1", True)]
+    assert bob.post("/api/listings/query", json={"subscribed_only": True}).json()["items"] == []
     page = alice.post("/api/listings/query", json={"hidden_only": True}).json()
     assert [(x["id"], x["hidden"]) for x in page["items"]] == [("2", True)]
     assert len(alice.post("/api/listings/query", json={"show_hidden": True}).json()["items"]) == 2

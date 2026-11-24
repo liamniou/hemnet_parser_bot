@@ -207,6 +207,7 @@ class SavedSearch(Base):
     center_lat: Mapped[float | None] = mapped_column(Float)
     center_lon: Mapped[float | None] = mapped_column(Float)
     radius_km: Mapped[float | None] = mapped_column(Float)
+    water_distance_max: Mapped[int | None] = mapped_column(Integer)
 
     notify_new: Mapped[bool] = mapped_column(Boolean, default=True)
     notify_price_drop: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -229,6 +230,8 @@ class UserListing(Base):
     )
     favorite: Mapped[bool] = mapped_column(Boolean, default=False)
     hidden: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Email me about price drops / sale of this listing, regardless of saved searches.
+    subscribed: Mapped[bool | None] = mapped_column(Boolean, default=False)
     note: Mapped[str | None] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
