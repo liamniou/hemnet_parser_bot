@@ -15,10 +15,8 @@ class Settings(BaseSettings):
     secret_key: str = ""
     session_days: int = 30
 
-    telegram_bot_token: str = ""
-    telegram_bot_username: str = ""
-    telegram_polling: bool = True
-    admin_telegram_ids: Annotated[list[int], NoDecode] = []
+    admin_emails: Annotated[list[str], NoDecode] = []
+    login_code_minutes: int = 15
 
     smtp_host: str = ""
     smtp_port: int = 587
@@ -43,12 +41,12 @@ class Settings(BaseSettings):
 
     dev_login: bool = False
 
-    @field_validator("admin_telegram_ids", mode="before")
+    @field_validator("admin_emails", mode="before")
     @classmethod
-    def _split_ids(cls, v):
+    def _split_emails(cls, v):
         if isinstance(v, str):
-            return [int(x) for x in v.replace(";", ",").split(",") if x.strip()]
-        return v
+            v = v.replace(";", ",").split(",")
+        return [x.strip().lower() for x in v if x.strip()]
 
     def ensure_secret_key(self) -> None:
         """Without a strong SECRET_KEY, generate one and persist it in the data dir."""
@@ -73,10 +71,6 @@ class Settings(BaseSettings):
     @property
     def smtp_enabled(self) -> bool:
         return bool(self.smtp_host and self.smtp_from)
-
-    @property
-    def telegram_enabled(self) -> bool:
-        return bool(self.telegram_bot_token)
 
 
 @lru_cache

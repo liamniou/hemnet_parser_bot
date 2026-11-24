@@ -20,7 +20,7 @@ def set_session(response: Response, user: User) -> None:
     s = get_settings()
     response.set_cookie(
         COOKIE,
-        _serializer().dumps({"uid": user.id, "tg": user.telegram_id}),
+        _serializer().dumps({"uid": user.id, "em": user.email}),
         max_age=s.session_days * 86400,
         httponly=True,
         samesite="lax",
@@ -41,7 +41,7 @@ def optional_user(request: Request, db: Session = Depends(get_db)) -> User | Non
     except BadSignature:
         return None
     user = db.get(User, data.get("uid"))
-    if user is None or user.disabled or user.telegram_id != data.get("tg"):
+    if user is None or user.disabled or user.email != data.get("em"):
         return None
     return user
 

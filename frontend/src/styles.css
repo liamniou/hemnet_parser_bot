@@ -303,3 +303,7 @@ legend { font-weight: 600; padding: 0 0.3rem; }
 .settings section .row { margin-top: 0.6rem; }
 .danger-zone { border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
 .card > .field + button { margin-top: 0.8rem; }
+.login-form { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 1rem; }
+.login-form button.big { justify-content: center; }
+.code-input { font-size: 1.6rem; letter-spacing: 0.4em; text-align: center; }
+.center-row { justify-content: center; gap: 1.2rem; }

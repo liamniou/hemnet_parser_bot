@@ -1,6 +1,5 @@
 from fastapi.testclient import TestClient
 
-from app.bot import handle_update
 from app.db import session_scope
 from app.models import Listing, ListingRegion, Region, User
 from tests.conftest import make_card
@@ -12,50 +11,61 @@ def _client():
     return TestClient(app)
 
 
-def _login(client, tg, tg_id: int, name: str = "User") -> dict:
-    r = client.post("/api/auth/telegram")
+def _login(client, mail, email: str) -> dict:
+    r = client.post("/api/auth/email", json={"email": email})
     assert r.status_code == 200, r.text
-    token = r.json()["token"]
-    assert r.json()["url"] == f"https://t.me/hemnet_test_bot?start=login_{token}"
-    assert client.get(f"/api/auth/telegram/{token}").json() == {"status": "pending"}
-
-    tg_user = {"id": tg_id, "first_name": name, "username": name.lower()}
-    handle_update(
-        tg,
-        {
-            "message": {
-                "chat": {"id": tg_id, "type": "private"},
-                "from": tg_user,
-                "text": f"/start login_{token}",
-            }
-        },
-    )
-    assert (
-        tg.sent[-1][1]["reply_markup"]["inline_keyboard"][0][0]["callback_data"] == f"login:{token}"
-    )
-    handle_update(tg, {"callback_query": {"id": "cb", "from": tg_user, "data": f"login:{token}"}})
-
-    r = client.get(f"/api/auth/telegram/{token}")
-    assert r.json()["status"] == "ok"
-    # Tokens are single-use.
-    assert client.get(f"/api/auth/telegram/{token}").status_code == 410
+    r = client.post("/api/auth/email/verify", json={"email": email, "code": mail.last_code(email)})
+    assert r.status_code == 200, r.text
     return r.json()["user"]
 
 
-def test_telegram_login_first_user_is_admin(app_env, tg):
+def test_email_code_login_first_user_is_admin(app_env, mail):
     c1, c2 = _client(), _client()
     assert c1.get("/api/me").status_code == 401
-    admin = _login(c1, tg, 100, "Admin")
-    user = _login(c2, tg, 200, "Regular")
-    assert admin["is_admin"] is True and user["is_admin"] is False
-    assert c1.get("/api/me").json()["telegram_id"] == 100
+    admin = _login(c1, mail, "Admin@X.se ")
+    user = _login(c2, mail, "user@x.se")
+    assert admin["email"] == "admin@x.se" and admin["is_admin"] is True
+    assert user["is_admin"] is False
+    assert c1.get("/api/me").json()["email"] == "admin@x.se"
     assert c2.get("/api/admin/regions").status_code == 403
-    assert c2.post("/api/auth/dev-login", params={"telegram_id": 1}).status_code == 404
+    assert c2.post("/api/auth/dev-login", params={"email": "a@b.se"}).status_code == 404
 
 
-def test_admin_regions_and_reseed_on_type_change(app_env, tg):
+def test_login_link_wrong_code_and_rate_limits(app_env, mail):
     c = _client()
-    _login(c, tg, 100, "Admin")
+    assert c.post("/api/auth/email", json={"email": "nope"}).status_code == 400
+    assert c.post("/api/auth/email", json={"email": "u@x.se"}).status_code == 200
+    # Resending within a minute is refused (no inbox spamming).
+    assert c.post("/api/auth/email", json={"email": "u@x.se"}).status_code == 429
+    assert len(mail.sent) == 1
+
+    for _ in range(5):
+        r = c.post("/api/auth/email/verify", json={"email": "u@x.se", "code": "000000"})
+        assert r.status_code == 400
+    # After too many wrong guesses even the right code is rejected.
+    code = mail.last_code("u@x.se")
+    r = c.post("/api/auth/email/verify", json={"email": "u@x.se", "code": code})
+    assert r.status_code == 400 and "expired" in r.json()["detail"]
+
+    # The emailed link still works (separate token), exactly once.
+    token = mail.last_link_token("u@x.se")
+    assert c.post("/api/auth/email/link", json={"token": token}).status_code == 200
+    assert c.get("/api/me").json()["email"] == "u@x.se"
+    assert _client().post("/api/auth/email/link", json={"token": token}).status_code == 400
+
+
+def test_admin_emails_setting(app_env, mail, monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setenv("ADMIN_EMAILS", "boss@x.se")
+    get_settings.cache_clear()
+    assert _login(_client(), mail, "first@x.se")["is_admin"] is False
+    assert _login(_client(), mail, "Boss@x.se")["is_admin"] is True
+
+
+def test_admin_regions_and_reseed_on_type_change(app_env, mail):
+    c = _client()
+    _login(c, mail, "admin@x.se")
     assert c.get("/api/admin/locations", params={"q": "Stock"}).json()[0]["id"] == "18031"
     r = c.post(
         "/api/admin/regions",
@@ -78,7 +88,7 @@ def test_admin_regions_and_reseed_on_type_change(app_env, tg):
     assert r.json()["seeded"] is False and r.json()["item_types"] == ["bostadsratt", "villa"]
 
 
-def test_searches_listings_and_ownership(app_env, tg):
+def test_searches_listings_and_ownership(app_env, mail):
     from app.hemnet.parse import parse_card
     from app.models import utcnow
     from app.services.scanner import upsert_card
@@ -90,8 +100,8 @@ def test_searches_listings_and_ownership(app_env, tg):
             upsert_card(db, parse_card(make_card(lid, askingPrice=price)), 1, False, utcnow())
 
     alice, bob = _client(), _client()
-    _login(alice, tg, 100, "Alice")
-    _login(bob, tg, 200, "Bob")
+    _login(alice, mail, "alice@x.se")
+    _login(bob, mail, "bob@x.se")
 
     body = {"name": "Cheap", "price_max": 4_000_000, "region_ids": [1]}
     r = alice.post("/api/searches", json=body)
@@ -117,9 +127,9 @@ def test_searches_listings_and_ownership(app_env, tg):
     assert {"name": "Södermalm", "count": 2} in facets["districts"]
 
 
-def test_delete_region_purge_keeps_shared_listings(app_env, tg):
+def test_delete_region_purge_keeps_shared_listings(app_env, mail):
     c = _client()
-    _login(c, tg, 100, "Admin")
+    _login(c, mail, "admin@x.se")
     with session_scope() as db:
         db.add_all(
             [Region(id=1, location_id="a", name="A"), Region(id=2, location_id="b", name="B")]
@@ -141,13 +151,13 @@ def test_delete_region_purge_keeps_shared_listings(app_env, tg):
         assert db.get(User, 1) is not None
 
 
-def test_deleted_account_session_does_not_carry_over(app_env, tg):
-    _login(_client(), tg, 100, "Admin")
+def test_deleted_account_session_does_not_carry_over(app_env, mail):
+    _login(_client(), mail, "admin@x.se")
     phone, laptop = _client(), _client()
-    _login(laptop, tg, 200, "Old")
+    _login(laptop, mail, "old@x.se")
     phone.cookies.update(laptop.cookies)
     assert laptop.delete("/api/me").status_code == 200
-    _login(_client(), tg, 300, "New")
+    _login(_client(), mail, "new@x.se")
     assert phone.get("/api/me").status_code == 401
 
 

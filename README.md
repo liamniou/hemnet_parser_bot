@@ -1,28 +1,28 @@
 # Hemnet Watch
 
 A self-hosted, multi-user website that archives [hemnet.se](https://www.hemnet.se) listings and alerts
-users about new listings, price drops and final sale prices via **Telegram** or **email**.
+users about new listings, price drops and final sale prices by **email**.
 
-(Formerly *hemnet_parser_bot*, a single-chat Telegram bot. All logic now lives in the web app; Telegram is
-used only for login and notifications.)
+(Formerly *hemnet_parser_bot*, a single-chat Telegram bot. Telegram is no longer used: sign-in and alerts
+are email-based.)
 
 ## Features
 
 - **Admin** chooses which Hemnet locations (municipalities, districts, …) and property types are scraped.
 - **Archive**: every listing's data, price history, final sale price and the full image gallery
   (resized to WebP) are kept after Hemnet removes the ad.
-- **Users** sign in with Telegram, save any number of searches (regions, districts, property type, price,
+- **Users** sign in with an emailed code or link, save any number of searches (regions, districts, property type, price,
   rooms, living area, fee, price/m², year built, balcony/elevator, keywords, distance from a point on a
   map) and get notified:
   - 🏠 when a new listing matches,
   - 📉 when a listing they were notified about (or saved) drops in price,
-  - 🔨 when it sells, with the final price, as a reply to the original Telegram message.
+  - 🔨 when it sells, with the final price.
 - Browse/filter the archive as a grid or a map, save/hide listings, keep private notes.
 
 ## How it works
 
 ```
-hemnet.se ──(curl_cffi, Chrome TLS fingerprint)──► scanner ─► SQLite ─► matching ─► notification queue ─► Telegram / SMTP
+hemnet.se ──(curl_cffi, Chrome TLS fingerprint)──► scanner ─► SQLite ─► matching ─► notification queue ─► SMTP
                                                     │                                     ▲
                                                     └─► detail pages ─► image archive     └── React UI / REST API
 ```
@@ -41,22 +41,19 @@ Server Component payloads containing GraphQL-shaped JSON (`ListingCard`, `Active
 | Detail fetch | 30 s | Listing page: year built, districts, elevator, full gallery, description. New listings are matched against saved searches after this step |
 | Removal check | 10 min | Disappeared listings: a `/bostad/` URL that redirects to `/salda/` means sold |
 | Image archive | 30 s | Downloads originals, resizes to `IMAGE_MAX_SIZE` WebP (~1.2 MB per listing at defaults) |
-| Notifications | 15 s | Sends the queue, retries failures, detects users who blocked the bot |
+| Notifications | 15 s | Sends the email queue, retries failures |
 
 All of this runs inside one container (single uvicorn worker); data lives in `/data` (`hemnet.db` + `images/`).
 
 ## Running
 
-1. Create a bot with [@BotFather](https://t.me/BotFather) and copy its token.
-2. `cp .env.example .env` and fill in at least `TELEGRAM_BOT_TOKEN`, `SECRET_KEY`, `PUBLIC_URL` and
-   `ADMIN_TELEGRAM_IDS` (if empty, the first user to sign in becomes admin).
-3. `docker compose up -d` and open `PUBLIC_URL`.
-4. Sign in with Telegram, then go to **Admin → Regions** and add a location.
+1. `cp .env.example .env` and fill in the `SMTP_*` settings, `PUBLIC_URL` and `ADMIN_EMAILS`
+   (if empty, the first user to sign in becomes admin). `SECRET_KEY` is generated if left empty.
+2. `docker compose up -d` and open `PUBLIC_URL`.
+3. Sign in with your email (6-digit code or the link in the email), then go to **Admin → Regions** and add a
+   location.
 
-Login uses a bot deep link (`t.me/<bot>?start=login_<token>`) with an in-chat confirmation button, so it works
-on a LAN address without registering a domain with BotFather. Signing in also lets the bot message the user.
-
-Email notifications are optional: configure `SMTP_*`, then users add and verify an address under **Settings**.
+Sign-in emails are rate limited (one per address per minute, five per hour) and a code allows five attempts.
 
 See [.env.example](.env.example) for all settings (scan intervals, request delay, image size/quality,
 `MIN_FREE_DISK_GB` to pause image archiving when the disk fills up, …).
@@ -74,7 +71,7 @@ Hemnet returns at most 2 500 results (50 pages) per search, so for regions large
 # backend (Python 3.12)
 cd backend
 pip install -r requirements-dev.txt
-DATA_DIR=./data DEV_LOGIN=true uvicorn app.main:app --reload   # DEV_LOGIN adds a login form without Telegram
+DATA_DIR=./data DEV_LOGIN=true uvicorn app.main:app --reload   # DEV_LOGIN allows sign-in without email
 pytest && ruff check . && ruff format --check .
 
 # frontend (Node 22), proxies /api and /media to :8000

@@ -206,7 +206,6 @@ def stats(db: Session = Depends(get_db)):
             "archive_seed_images": s.archive_seed_images,
             "image_max_size": s.image_max_size,
             "min_free_disk_gb": s.min_free_disk_gb,
-            "telegram": s.telegram_enabled,
             "smtp": s.smtp_enabled,
         },
     }

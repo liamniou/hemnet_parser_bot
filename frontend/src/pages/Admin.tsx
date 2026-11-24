@@ -229,9 +229,8 @@ function Users() {
     <table className="table">
       <thead>
         <tr>
-          <th>User</th>
-          <th>Telegram</th>
           <th>Email</th>
+          <th>Name</th>
           <th>Searches</th>
           <th>Joined</th>
           <th>Last login</th>
@@ -242,14 +241,11 @@ function Users() {
       <tbody>
         {users.map((u) => (
           <tr key={u.id} className={u.disabled ? "dim" : ""}>
-            <td>{u.display_name}</td>
-            <td className="small">
-              {u.username ? `@${u.username}` : u.telegram_id}
-              {u.telegram_blocked && <span className="error"> (blocked)</span>}
+            <td>
+              {u.email}
+              {!u.notify_email && <span className="muted small"> (alerts off)</span>}
             </td>
-            <td className="small">
-              {u.email ?? "–"} {u.email && !u.email_verified && <span className="muted">(unverified)</span>}
-            </td>
+            <td className="small">{u.name ?? "–"}</td>
             <td>{u.search_count}</td>
             <td className="small">{dateTime(u.created_at)}</td>
             <td className="small">{dateTime(u.last_login_at)}</td>
