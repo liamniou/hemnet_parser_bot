@@ -12,9 +12,21 @@ export function StatusBadge({ l }: { l: Pick<Card, "status" | "upcoming" | "new_
   return null;
 }
 
-export default function ListingCardView({ l, onFavorite }: { l: Card; onFavorite?: (l: Card) => void }) {
+interface Props {
+  l: Card;
+  onFavorite?: (l: Card) => void;
+  onHover?: (id: string | null) => void;
+  highlighted?: boolean;
+}
+
+export default function ListingCardView({ l, onFavorite, onHover, highlighted }: Props) {
   return (
-    <Link to={`/listings/${l.id}`} className={`listing-card ${l.hidden ? "dim" : ""}`}>
+    <Link
+      to={`/listings/${l.id}`}
+      className={`listing-card ${l.hidden ? "dim" : ""} ${highlighted ? "highlighted" : ""}`}
+      onMouseEnter={onHover ? () => onHover(l.id) : undefined}
+      onMouseLeave={onHover ? () => onHover(null) : undefined}
+    >
       <div className="cover">
         {l.cover ? <img src={l.cover} alt="" loading="lazy" /> : <div className="noimg"><ImageIcon /></div>}
         <div className="badges">

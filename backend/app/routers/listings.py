@@ -48,7 +48,7 @@ def map_points(q: ListingQuery, user: User = Depends(current_user), db: Session 
             rooms=x.rooms,
             living_area=x.living_area,
         )
-        for x in listings[:3000]
+        for x in listings[:10000]
         if x.lat is not None and x.lon is not None
     ]
 
