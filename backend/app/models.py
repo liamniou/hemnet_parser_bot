@@ -125,6 +125,8 @@ class Listing(Base):
     has_balcony: Mapped[bool | None] = mapped_column(Boolean)
     has_elevator: Mapped[bool | None] = mapped_column(Boolean)
     energy_class: Mapped[str | None] = mapped_column(String(8))
+    water_distance: Mapped[int | None] = mapped_column(Integer)  # metres to nearest lake/sea
+    coastline_distance: Mapped[int | None] = mapped_column(Integer)  # metres to the sea
     brf_name: Mapped[str | None] = mapped_column(String(255))
     broker_name: Mapped[str | None] = mapped_column(String(255))
     broker_agency: Mapped[str | None] = mapped_column(String(255))

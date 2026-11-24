@@ -78,6 +78,8 @@ def _active(**over):
             ],
         },
         "floorPlanImages": [{"__typename": "ListingImage", "filename": "fp/1/c.jpg"}],
+        "closestWaterDistanceMeters": 400,
+        "coastlineDistanceMeters": 1100,
     }
     obj.update(over)
     return obj
@@ -90,6 +92,7 @@ def test_parse_detail_active_picks_richest_object():
     f = detail.fields
     assert f["year_built"] == 1962 and f["has_balcony"] is True and f["has_elevator"] is False
     assert f["districts"] == ["Årsta", "Söderort"] and f["fee"] == 4176
+    assert (f["water_distance"], f["coastline_distance"]) == (400, 1100)
     assert detail.image_urls == [
         "https://bilder.hemnet.se/images/original/48/55/a.jpg",
         "https://bilder.hemnet.se/images/original/83/80/b.jpg",
@@ -170,3 +173,11 @@ def test_parse_card_tolerates_unresolvable_refs():
     card = make_card("7", housingForm="$ff:1:x", labels="$ff:2", thumbnails="$ff:3")
     c = parse.parse_search(search_html([card])).cards[0]
     assert (c.housing_form, c.labels, c.thumbnails) == (None, [], [])
+
+
+def test_parse_detail_project_unit():
+    unit = _active(**{"__typename": "ProjectUnit", "closestWaterDistanceMeters": 250})
+    detail = parse.parse_detail(rsc_html({"__typename": "Project", "id": "9"}, unit), "42")
+    assert detail.kind == "active"
+    assert detail.fields["water_distance"] == 250 and detail.fields["new_construction"] is True
+    assert len(detail.image_urls) == 3

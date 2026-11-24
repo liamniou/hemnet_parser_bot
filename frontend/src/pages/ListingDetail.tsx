@@ -4,7 +4,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, EyeOff, ExternalLink, Heart } fro
 import { MapContainer, Marker, TileLayer } from "react-leaflet";
 import { api } from "../api";
 import { StatusBadge } from "../components/ListingCard";
-import { GradeChip, RoomsChip, TypeBadge } from "../components/Grading";
+import { GradeChip, RoomsChip, TypeBadge, WaterBadge, distance } from "../components/Grading";
 import { pinIcon } from "../components/mapIcons";
 import type { ListingDetail as Detail } from "../types";
 import { date, dateTime, kr, num, title } from "../format";
@@ -64,6 +64,8 @@ export default function ListingDetail() {
     ["Year built", l.year_built],
     ["Balcony", l.has_balcony == null ? null : l.has_balcony ? "Yes" : "No"],
     ["Elevator", l.has_elevator == null ? null : l.has_elevator ? "Yes" : "No"],
+    ["Nearest water", distance(l.water_distance)],
+    ["Distance to the sea", distance(l.coastline_distance)],
     ["Energy class", l.energy_class],
     ["Association", l.brf_name],
     ["Broker", [l.broker_name, l.broker_agency].filter(Boolean).join(", ")],
@@ -84,7 +86,10 @@ export default function ListingDetail() {
           <h1>
             {title(l)} <StatusBadge l={l} />
           </h1>
-          <TypeBadge symbol={l.housing_form} name={[l.housing_form_name, l.tenure].filter(Boolean).join(" · ")} />
+          <div className="row">
+            <TypeBadge symbol={l.housing_form} name={[l.housing_form_name, l.tenure].filter(Boolean).join(" · ")} />
+            <WaterBadge water={l.water_distance} coast={l.coastline_distance} />
+          </div>
           <div className="price big">
             {l.status === "sold" ? (
               <>

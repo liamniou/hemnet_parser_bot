@@ -111,6 +111,8 @@ class ListingCardOut(ORM):
     sold_at: datetime | None
     sold_price_change: str | None
     removed_at: datetime | None
+    water_distance: int | None
+    coastline_distance: int | None
     cover: str | None = None
     image_count: int = 0
     photos: list[str] = []

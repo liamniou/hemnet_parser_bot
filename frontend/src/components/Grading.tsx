@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { Building, Building2, House, Houses, LandPlot, TentTree, Tractor, type LucideIcon } from "lucide-react";
+import { Building, Building2, House, Houses, LandPlot, TentTree, Tractor, Waves, type LucideIcon } from "lucide-react";
 
 const TYPE_ICONS: Record<string, LucideIcon> = {
   APARTMENT: Building2,
@@ -81,3 +81,20 @@ export function GradeChip({ scale, value, children, big }: { scale: Scale; value
 export function PlainChip({ children }: { children: ReactNode }) {
   return <span className="grade neutral">{children}</span>;
 }
+
+export const NEAR_WATER_M = 500;
+
+const metres = (m: number) => (m >= 1000 ? `${+(m / 1000).toFixed(1)} km` : `${m} m`);
+
+/** "Close to water" badge for listings within NEAR_WATER_M of a lake or the sea. */
+export function WaterBadge({ water, coast }: { water: number | null; coast?: number | null }) {
+  if (water == null || water > NEAR_WATER_M) return null;
+  const sea = coast != null && coast <= water + 50;
+  return (
+    <span className="badge water" title={`${sea ? "Sea" : "Water"} ${metres(water)} away (Hemnet)`}>
+      <Waves size={12} /> {water <= 100 ? "By the water" : "Near water"} · {metres(water)}
+    </span>
+  );
+}
+
+export const distance = (m: number | null) => (m == null ? null : metres(m));
