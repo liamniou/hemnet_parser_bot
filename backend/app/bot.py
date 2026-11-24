@@ -7,7 +7,6 @@ delivering notifications, and handling the inline "Save" button on notifications
 import html
 import logging
 import threading
-import time
 from datetime import timedelta
 
 from app.config import get_settings
@@ -157,8 +156,9 @@ class BotPoller:
                     allowed_updates=["message", "callback_query", "my_chat_member"],
                 )
             except Exception as e:
-                log.warning("getUpdates failed: %s", e)
-                time.sleep(5)
+                wait = getattr(e, "retry_after", None) or 5
+                log.warning("getUpdates failed (retrying in %ss): %s", wait, e)
+                self._stop.wait(wait + 1)
                 continue
             for update in updates:
                 offset = update["update_id"] + 1

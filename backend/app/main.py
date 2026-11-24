@@ -19,6 +19,8 @@ from app.services import telegram
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logging.getLogger("apscheduler").setLevel(logging.ERROR)
+# httpx logs full request URLs at INFO, and Telegram URLs embed the bot token.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("hemnet")
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"

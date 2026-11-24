@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -9,9 +10,14 @@ log = logging.getLogger(__name__)
 
 
 class TelegramError(Exception):
-    def __init__(self, message: str, code: int | None = None):
+    def __init__(self, message: str, code: int | None = None, retry_after: int | None = None):
         super().__init__(message)
         self.code = code
+        self.retry_after = retry_after
+
+    @property
+    def rate_limited(self) -> bool:
+        return self.code == 429
 
     @property
     def blocked(self) -> bool:
@@ -28,7 +34,11 @@ class TelegramAPI:
         r = self.client.post(f"{self.base}/{method}", json=payload)
         data = r.json()
         if not data.get("ok"):
-            raise TelegramError(data.get("description", r.text), data.get("error_code"))
+            raise TelegramError(
+                data.get("description", r.text),
+                data.get("error_code"),
+                (data.get("parameters") or {}).get("retry_after"),
+            )
         return data["result"]
 
     def send_message(self, chat_id: int, text: str, **kw: Any) -> dict:
@@ -66,17 +76,19 @@ def set_api(api: TelegramAPI | None) -> None:
 
 
 _bot_username: str | None = None
+_getme_failed_at = 0.0
 
 
 def bot_username() -> str:
-    global _bot_username
+    global _bot_username, _getme_failed_at
     s = get_settings()
     if s.telegram_bot_username:
         return s.telegram_bot_username.lstrip("@")
-    if _bot_username is None and (api := get_api()):
+    # Back off after a failure so page loads don't hammer a rate-limited bot.
+    if _bot_username is None and time.monotonic() - _getme_failed_at > 60 and (api := get_api()):
         try:
             _bot_username = api.call("getMe")["username"]
         except Exception as e:
+            _getme_failed_at = time.monotonic()
             log.error("getMe failed: %s", e)
-            return ""
     return _bot_username or ""

@@ -166,3 +166,23 @@ def test_full_scan_beyond_hemnet_cap_does_not_mark_removed(app_env):
     assert res.complete is False and res.removed == 0
     with session_scope() as db:
         assert db.get(Listing, "2").status == "active"
+
+
+def test_rate_limited_telegram_send_is_retried_not_failed(app_env, tg):
+    from app.services.telegram import TelegramError
+
+    rid = _setup()
+    app_env.pages = [[]]
+    scanner.scan_region(rid)
+    app_env.since_pages = [[make_card("7")]]
+    scanner.scan_region(rid)
+    scanner.fetch_details()
+    tg.fail_with = TelegramError("Too Many Requests: retry after 30", 429, 30)
+    for _ in range(notifications.MAX_ATTEMPTS + 1):
+        notifications.dispatch_pending()
+    with session_scope() as db:
+        assert db.scalars(select(Notification.status)).all() == ["pending"]
+    tg.fail_with = None
+    notifications.dispatch_pending()
+    with session_scope() as db:
+        assert db.scalars(select(Notification.status)).all() == ["sent"]
