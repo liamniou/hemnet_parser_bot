@@ -360,7 +360,11 @@ class DetailData:
 
 def parse_detail(html: str, listing_id: str) -> DetailData:
     payload = extract_rsc(html)
+    # New-construction units use "ProjectUnit" with the same fields as ordinary listings.
+    project = _richest(find_objects(payload, "ProjectUnit"), id=listing_id)
     active = _richest(find_objects(payload, "ActivePropertyListing"), id=listing_id)
+    if project and len(project) > len(active or {}):
+        active = project
     if active and len(active) > 10:
         active = Rows(payload).resolve(active)
         coords = active.get("coordinates") or {}
@@ -395,11 +399,14 @@ def parse_detail(html: str, listing_id: str) -> DetailData:
             "has_balcony": _amenity(active, "BALCONY"),
             "has_elevator": _amenity(active, "ELEVATOR"),
             "energy_class": (active.get("energyClassification") or {}).get("classification"),
+            "water_distance": active.get("closestWaterDistanceMeters"),
+            "coastline_distance": active.get("coastlineDistanceMeters"),
             "brf_name": (active.get("brf") or {}).get("name"),
             "broker_name": (active.get("broker") or {}).get("name"),
             "broker_agency": (active.get("brokerAgency") or {}).get("name"),
             "description": active.get("description"),
-            "new_construction": bool(active.get("isNewConstruction")),
+            "new_construction": bool(active.get("isNewConstruction"))
+            or active.get("__typename") == "ProjectUnit",
             "upcoming": bool(active.get("isUpcoming")),
             "published_at": parse_ts(active.get("publishedAt")),
         }

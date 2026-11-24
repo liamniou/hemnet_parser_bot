@@ -437,3 +437,10 @@ legend { font-weight: 600; padding: 0 0.3rem; }
   border-radius: 6px;
 }
 .listing-card .card-actions, .listing-card .badges, .cover-type { z-index: 1; }
+.badge.water { background: #cffafe; color: #155e75; }
+@media (prefers-color-scheme: dark) { .badge.water { background: #164e63; color: #a5f3fc; } }
+.detail-head .row .type-badge { margin-bottom: 0; }
+.detail-head .row { margin-bottom: 0.4rem; }
+.cover-type { display: flex; gap: 4px; align-items: center; right: 70px; flex-wrap: wrap; }
+.cover-type .badge.water { font-size: 0.75rem; padding: 2px 7px; border-radius: 6px; }
+.listing-card .badges { right: 84px; flex-wrap: wrap; }

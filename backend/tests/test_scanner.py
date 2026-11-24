@@ -227,3 +227,24 @@ def test_hidden_listing_sends_no_followups(app_env, mail):
     ]
     assert scanner.scan_sold(rid) == 1
     assert _notifications() == [("Alice", "new", "5")]
+
+
+def test_new_columns_are_added_to_existing_db_and_backfilled(tmp_path):
+    import sqlite3
+
+    from app.db import init_engine
+
+    path = tmp_path / "old.db"
+    init_engine(f"sqlite:///{path}")
+    with session_scope() as db:
+        db.add(Listing(id="1", slug="s", detail_fetched_at=utcnow(), detail_attempts=1))
+    con = sqlite3.connect(path)
+    con.execute("ALTER TABLE listings DROP COLUMN water_distance")
+    con.commit()
+    con.close()
+
+    init_engine(f"sqlite:///{path}")
+    con = sqlite3.connect(path)
+    cols = {r[1] for r in con.execute("PRAGMA table_info(listings)")}
+    row = con.execute("SELECT detail_fetched_at, detail_attempts FROM listings").fetchone()
+    assert "water_distance" in cols and row == (None, 0)

@@ -3,7 +3,7 @@ import { Eye, EyeOff, Heart, TrendingDown } from "lucide-react";
 import CardSlider from "./CardSlider";
 import type { ListingCard as Card } from "../types";
 import { date, kr, num, title } from "../format";
-import { GradeChip, PlainChip, RoomsChip, TypeBadge } from "./Grading";
+import { GradeChip, PlainChip, RoomsChip, TypeBadge, WaterBadge } from "./Grading";
 
 export function StatusBadge({ l }: { l: Pick<Card, "status" | "upcoming" | "new_construction"> }) {
   if (l.status === "sold") return <span className="badge sold">Sold</span>;
@@ -69,6 +69,7 @@ export default function ListingCardView({ l, onFavorite, onHide, onHover, highli
         </div>
         <div className="cover-type">
           <TypeBadge symbol={l.housing_form} name={l.housing_form_name} />
+          <WaterBadge water={l.water_distance} coast={l.coastline_distance} />
         </div>
       </div>
       <div className="body">

@@ -92,6 +92,8 @@ export interface ListingCard {
   sold_at: string | null;
   sold_price_change: string | null;
   removed_at: string | null;
+  water_distance: number | null;
+  coastline_distance: number | null;
   cover: string | null;
   image_count: number;
   photos: string[];
