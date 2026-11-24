@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import L from "leaflet";
 import type { MapPoint } from "../types";
 import { mkr, num } from "../format";
+import { GradeChip, RoomsChip } from "./Grading";
 
 const COLORS: Record<string, string> = { active: "#2563eb", sold: "#dc2626", removed: "#6b7280" };
 
@@ -39,7 +40,11 @@ export default function ListingsMap({ points }: { points: MapPoint[] }) {
               <b>{p.street_address}</b>
             </Link>
             <br />
-            {mkr(p.asking_price)} · {num(p.rooms)} rum · {num(p.living_area)} m²
+            <span className="facts">
+              <GradeChip scale="price" value={p.asking_price}>{mkr(p.asking_price)}</GradeChip>
+              {p.rooms != null && <RoomsChip rooms={p.rooms}>{num(p.rooms)} rum</RoomsChip>}
+              {p.living_area != null && <span className="grade neutral">{num(p.living_area)} m²</span>}
+            </span>
           </Popup>
         </CircleMarker>
       ))}
