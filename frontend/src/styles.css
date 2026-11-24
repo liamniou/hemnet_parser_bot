@@ -57,6 +57,16 @@ input, select, textarea, button, .button {
   padding: 0.45rem 0.65rem;
 }
 textarea { width: 100%; resize: vertical; }
+/* Native select arrows ignore padding and hug the edge; draw our own with room around it. */
+select {
+  appearance: none;
+  padding-right: 2.1rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 16px;
+  cursor: pointer;
+}
 input[type="checkbox"] { padding: 0; accent-color: var(--primary); }
 input:focus, select:focus, textarea:focus { outline: 2px solid color-mix(in srgb, var(--primary) 40%, transparent); }
 button, .button {
@@ -141,7 +151,10 @@ main { padding: 1.2rem; max-width: 1400px; margin: 0 auto; }
 .toolbar .seg button { height: 38px; }
 .toolbar .seg button { padding: 0 0.6rem; }
 .seg { display: inline-flex; }
-.seg button { border-radius: 0; }
+.seg button { border-radius: 0; position: relative; }
+/* Buttons overlap by 1px; lift the active/hovered one so its whole border shows. */
+.seg button.on { z-index: 1; }
+.seg button:hover:not(:disabled) { z-index: 2; }
 .seg button:first-child { border-radius: 8px 0 0 8px; }
 .seg button:last-child { border-radius: 0 8px 8px 0; margin-left: -1px; }
 
