@@ -146,3 +146,27 @@ def test_parse_detail_resolves_streamed_text_rows():
     )
     detail = parse.parse_detail(html, "42")
     assert detail.fields["description"] == desc
+
+
+def test_parse_search_resolves_deduplicated_path_refs():
+    top = make_card("5")
+    # Next.js streams the top-listing ad first, then dedupes the same card in the results.
+    element = ["$", "$L62", None, {"tracking": {"top": {"card": top}}}]
+    tracking = f"3b:{json.dumps(['$L44', [], [], [], element])}\n"
+    ref = "$3b:4:props:tracking:top:card"
+    dup = {k: (f"{ref}:{k}" if isinstance(v, (dict, list)) else v) for k, v in top.items()}
+    html = search_html([dup, make_card("6")])
+    html = html.replace(
+        "<script>", f"<script>self.__next_f.push({json.dumps([1, tracking])})</script><script>", 1
+    )
+    page = parse.parse_search(html)
+    c = page.cards[0]
+    assert [x.id for x in page.cards] == ["5", "6"]
+    assert c.housing_form == "APARTMENT" and c.lat == 59.31 and c.has_balcony is True
+    assert c.thumbnails == top["thumbnails"]
+
+
+def test_parse_card_tolerates_unresolvable_refs():
+    card = make_card("7", housingForm="$ff:1:x", labels="$ff:2", thumbnails="$ff:3")
+    c = parse.parse_search(search_html([card])).cards[0]
+    assert (c.housing_form, c.labels, c.thumbnails) == (None, [], [])
