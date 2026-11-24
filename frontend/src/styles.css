@@ -360,3 +360,25 @@ legend { font-weight: 600; padding: 0 0.3rem; }
 }
 .detail-head .type-badge { background: var(--info-bg); color: var(--primary); font-size: 0.85rem; margin-bottom: 0.4rem; }
 .leaflet-popup-content .facts { display: flex; flex-wrap: wrap; margin-top: 4px; }
+
+/* Cards + sticky map side by side. The map hides on narrow screens. */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 37%); gap: 1rem; align-items: start; }
+.split .grid { grid-template-columns: repeat(auto-fill, minmax(225px, 1fr)); }
+.split-map { position: sticky; top: 66px; }
+.side-map { height: calc(100vh - 82px); min-height: 360px; }
+@media (max-width: 1000px) {
+  .split { display: block; }
+  .split-map { display: none; }
+}
+.listing-card.highlighted { outline: 2px solid #f97316; outline-offset: -1px; box-shadow: 0 6px 20px rgb(249 115 22 / 0.25); }
+.leaflet-tooltip.price-tip {
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: #f97316;
+  color: #fff;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.25);
+}
+.leaflet-tooltip.price-tip::before { border-top-color: #f97316; }

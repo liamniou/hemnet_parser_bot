@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { BookmarkPlus, Grid3x3, Map as MapIcon, SlidersHorizontal, X } from "lucide-react";
+import { BookmarkPlus, Columns2, Grid3x3, Map as MapIcon, SlidersHorizontal, X } from "lucide-react";
 import { api } from "../api";
 import CriteriaForm from "../components/CriteriaForm";
 import ListingCardView from "../components/ListingCard";
@@ -9,6 +9,8 @@ import type { ListingCard, ListingPage, ListingQuery, MapPoint, Region, SavedSea
 import { emptyCriteria } from "../types";
 
 const STORAGE_KEY = "hw.listingQuery";
+const VIEW_KEY = "hw.listingView";
+type View = "grid" | "split" | "map";
 
 const defaultQuery = (): ListingQuery => ({
   ...emptyCriteria(),
@@ -44,7 +46,15 @@ export default function Listings() {
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [searches, setSearches] = useState<SavedSearch[]>([]);
-  const [view, setView] = useState<"grid" | "map">("grid");
+  const [view, setViewState] = useState<View>(() => {
+    const v = localStorage.getItem(VIEW_KEY);
+    return v === "grid" || v === "map" || v === "split" ? v : "split";
+  });
+  const setView = (v: View) => {
+    localStorage.setItem(VIEW_KEY, v);
+    setViewState(v);
+  };
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,14 +66,49 @@ export default function Listings() {
 
   useEffect(() => {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(query));
+    if (view === "map") return;
     setLoading(true);
     setError(null);
-    const req =
-      view === "grid"
-        ? api<ListingPage>("/api/listings/query", { method: "POST", json: query }).then(setPage)
-        : api<MapPoint[]>("/api/listings/map", { method: "POST", json: query }).then(setPoints);
-    req.catch((e) => setError(String(e))).finally(() => setLoading(false));
+    api<ListingPage>("/api/listings/query", { method: "POST", json: query })
+      .then(setPage)
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading(false));
   }, [query, view]);
+
+  // Only the full map shows every result; the split map shows the current page.
+  const pointsKey = JSON.stringify({ ...query, page: 1 });
+  useEffect(() => {
+    if (view !== "map") return;
+    api<MapPoint[]>("/api/listings/map", { method: "POST", json: JSON.parse(pointsKey) })
+      .then(setPoints)
+      .catch((e) => setError(String(e)));
+  }, [pointsKey, view]);
+
+  const pagePoints = useMemo<MapPoint[]>(
+    () =>
+      (page?.items ?? [])
+        .filter((l) => l.lat != null && l.lon != null)
+        .map((l) => ({
+          id: l.id,
+          lat: l.lat!,
+          lon: l.lon!,
+          status: l.status,
+          asking_price: l.status === "sold" && l.sold_price ? l.sold_price : l.asking_price,
+          street_address: l.street_address,
+          rooms: l.rooms,
+          living_area: l.living_area,
+        })),
+    [page],
+  );
+  const highlight = useMemo(
+    () => pagePoints.find((p) => p.id === hoveredId) ?? null,
+    [pagePoints, hoveredId],
+  );
+
+  const goToPage = (n: number) => {
+    setQuery((q) => ({ ...q, page: n }));
+    window.scrollTo(0, 0);
+  };
 
   const update = useCallback((patch: Partial<ListingQuery>) => {
     setQuery((q) => ({ ...q, page: 1, ...patch }));
@@ -147,10 +192,13 @@ export default function Listings() {
           </button>
         )}
         <div className="seg">
-          <button className={view === "grid" ? "on" : ""} onClick={() => setView("grid")} title="Grid">
+          <button className={view === "grid" ? "on" : ""} onClick={() => setView("grid")} title="Cards only">
             <Grid3x3 size={16} />
           </button>
-          <button className={view === "map" ? "on" : ""} onClick={() => setView("map")} title="Map">
+          <button className={view === "split" ? "on" : ""} onClick={() => setView("split")} title="Cards and map">
+            <Columns2 size={16} />
+          </button>
+          <button className={view === "map" ? "on" : ""} onClick={() => setView("map")} title="Map only">
             <MapIcon size={16} />
           </button>
         </div>
@@ -204,22 +252,44 @@ export default function Listings() {
               {regions.length === 0 && "An admin needs to add regions to scrape first."}
             </div>
           )}
-          <div className="grid">
-            {page?.items.map((l) => <ListingCardView key={l.id} l={l} onFavorite={toggleFavorite} />)}
-          </div>
-          {pages > 1 && (
-            <div className="pager">
-              <button disabled={query.page <= 1} onClick={() => setQuery((q) => ({ ...q, page: q.page - 1 }))}>
-                ← Prev
-              </button>
-              <span>
-                Page {query.page} / {pages}
-              </span>
-              <button disabled={query.page >= pages} onClick={() => setQuery((q) => ({ ...q, page: q.page + 1 }))}>
-                Next →
-              </button>
+          <div className={view === "split" ? "split" : ""}>
+            <div>
+              <div className="grid">
+                {page?.items.map((l) => (
+                  <ListingCardView
+                    key={l.id}
+                    l={l}
+                    onFavorite={toggleFavorite}
+                    onHover={view === "split" ? setHoveredId : undefined}
+                    highlighted={view === "split" && hoveredId === l.id}
+                  />
+                ))}
+              </div>
+              {pages > 1 && (
+                <div className="pager">
+                  <button disabled={query.page <= 1} onClick={() => goToPage(query.page - 1)}>
+                    ← Prev
+                  </button>
+                  <span>
+                    Page {query.page} / {pages}
+                  </span>
+                  <button disabled={query.page >= pages} onClick={() => goToPage(query.page + 1)}>
+                    Next →
+                  </button>
+                </div>
+              )}
             </div>
-          )}
+            {view === "split" && (
+              <aside className="split-map">
+                <ListingsMap
+                  points={pagePoints}
+                  highlight={highlight}
+                  onHover={setHoveredId}
+                  className="side-map"
+                />
+              </aside>
+            )}
+          </div>
         </>
       )}
     </div>
