@@ -61,14 +61,23 @@ def filter_listings(
     return out
 
 
+def card_photos(listing: Listing) -> list[str]:
+    """Photos for the card slider: the archive if we have it, else Hemnet's card-sized images."""
+    if listing.images:
+        return [f"/media/{img['file']}" for img in listing.images]
+    if listing.image_urls:
+        # Gallery originals are ~2048px; the "itemgallery_cut" size of the same file is ~690px.
+        return [
+            u.replace("/images/original/", "/images/itemgallery_cut/") for u in listing.image_urls
+        ]
+    return list(listing.thumbnails or [])
+
+
 def to_card(listing: Listing, state: UserListing | None, dropped: bool) -> ListingCardOut:
     card = ListingCardOut.model_validate(listing)
-    if listing.images:
-        card.cover = f"/media/{listing.images[0]['file']}"
-        card.image_count = len(listing.images)
-    elif listing.thumbnails:
-        card.cover = listing.thumbnails[0]
-        card.image_count = len(listing.image_urls or listing.thumbnails)
+    card.photos = card_photos(listing)
+    card.cover = card.photos[0] if card.photos else None
+    card.image_count = len(listing.images or listing.image_urls or listing.thumbnails or [])
     card.price_dropped = dropped
     if state:
         card.favorite, card.hidden = state.favorite, state.hidden

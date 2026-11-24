@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { Eye, EyeOff, Heart, ImageIcon, TrendingDown } from "lucide-react";
+import { Eye, EyeOff, Heart, TrendingDown } from "lucide-react";
+import CardSlider from "./CardSlider";
 import type { ListingCard as Card } from "../types";
 import { date, kr, num, title } from "../format";
 import { GradeChip, PlainChip, RoomsChip, TypeBadge } from "./Grading";
@@ -29,7 +30,7 @@ export default function ListingCardView({ l, onFavorite, onHide, onHover, highli
       onMouseLeave={onHover ? () => onHover(null) : undefined}
     >
       <div className="cover">
-        {l.cover ? <img src={l.cover} alt="" loading="lazy" /> : <div className="noimg"><ImageIcon /></div>}
+        <CardSlider photos={l.photos?.length ? l.photos : l.cover ? [l.cover] : []} />
         <div className="badges">
           <StatusBadge l={l} />
           {l.price_dropped && (
@@ -69,7 +70,6 @@ export default function ListingCardView({ l, onFavorite, onHide, onHover, highli
         <div className="cover-type">
           <TypeBadge symbol={l.housing_form} name={l.housing_form_name} />
         </div>
-        {l.image_count > 1 && <span className="count">{l.image_count} 📷</span>}
       </div>
       <div className="body">
         <div className="price">

@@ -113,6 +113,7 @@ class ListingCardOut(ORM):
     removed_at: datetime | None
     cover: str | None = None
     image_count: int = 0
+    photos: list[str] = []
     price_dropped: bool = False
     favorite: bool = False
     hidden: bool = False
