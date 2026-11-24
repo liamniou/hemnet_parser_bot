@@ -94,6 +94,7 @@ export interface ListingCard {
   removed_at: string | null;
   cover: string | null;
   image_count: number;
+  photos: string[];
   price_dropped: boolean;
   favorite: boolean;
   hidden: boolean;

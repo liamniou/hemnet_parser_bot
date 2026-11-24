@@ -112,7 +112,11 @@ def test_searches_listings_and_ownership(app_env, mail):
 
     page = alice.post("/api/listings/query", json={"search_id": sid}).json()
     assert [x["id"] for x in page["items"]] == ["1"]
+    with session_scope() as db:
+        db.get(Listing, "2").images = [{"file": "2/00.webp"}, {"file": "2/01.webp"}]
     page = alice.post("/api/listings/query", json={"sort": "price_desc"}).json()
+    assert page["items"][0]["photos"] == ["/media/2/00.webp", "/media/2/01.webp"]
+    assert page["items"][1]["photos"] == make_card("1")["thumbnails"]
     assert [x["id"] for x in page["items"]] == ["2", "1"]
 
     assert alice.put("/api/listings/2/state", json={"hidden": True}).status_code == 200
