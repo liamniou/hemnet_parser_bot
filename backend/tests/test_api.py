@@ -172,3 +172,27 @@ def test_missing_secret_key_is_generated_and_persisted(app_env, monkeypatch):
     again.ensure_secret_key()
     assert again.secret_key == s.secret_key
     assert (get_settings().data_dir / "secret_key").exists()
+
+
+def test_spa_index_is_revalidated_and_assets_are_immutable(app_env, tmp_path, monkeypatch):
+    import importlib
+
+    import app.main as main
+
+    static = tmp_path / "static"
+    (static / "assets").mkdir(parents=True)
+    (static / "index.html").write_text("<html>app</html>")
+    (static / "assets" / "index-abc.js").write_text("x")
+    monkeypatch.setenv("STATIC_DIR", str(static))
+    main = importlib.reload(main)
+    try:
+        from fastapi.testclient import TestClient
+
+        c = TestClient(main.app)
+        r = c.get("/listings/123")
+        assert r.text == "<html>app</html>" and r.headers["cache-control"] == "no-cache"
+        r = c.get("/assets/index-abc.js")
+        assert "immutable" in r.headers["cache-control"]
+    finally:
+        monkeypatch.delenv("STATIC_DIR")
+        importlib.reload(main)

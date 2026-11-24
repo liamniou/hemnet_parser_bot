@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -20,7 +21,7 @@ logging.getLogger("apscheduler").setLevel(logging.ERROR)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("hemnet")
 
-STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+STATIC_DIR = Path(os.environ.get("STATIC_DIR", Path(__file__).resolve().parent.parent / "static"))
 
 
 @asynccontextmanager
@@ -75,8 +76,17 @@ class _Media(StaticFiles):
 
 app.mount("/media", _Media(directory=get_settings().images_dir, check_dir=False), name="media")
 
+
+class _Assets(StaticFiles):
+    # Build output is content-hashed, so it never changes under the same name.
+    async def get_response(self, path, scope):
+        resp = await super().get_response(path, scope)
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return resp
+
+
 if (STATIC_DIR / "index.html").exists():
-    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+    app.mount("/assets", _Assets(directory=STATIC_DIR / "assets"), name="assets")
 
     @app.get("/{path:path}", include_in_schema=False)
     def spa(path: str):
@@ -85,4 +95,5 @@ if (STATIC_DIR / "index.html").exists():
         candidate = (STATIC_DIR / path).resolve()
         if path and candidate.is_file() and STATIC_DIR in candidate.parents:
             return FileResponse(candidate)
-        return FileResponse(STATIC_DIR / "index.html")
+        # Always revalidate the page so browsers pick up new asset hashes after a deploy.
+        return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
