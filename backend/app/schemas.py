@@ -43,6 +43,7 @@ class CriteriaIn(BaseModel):
     center_lat: float | None = Field(None, ge=-90, le=90)
     center_lon: float | None = Field(None, ge=-180, le=180)
     radius_km: float | None = Field(None, gt=0, le=200)
+    water_distance_max: int | None = Field(None, gt=0, le=10_000)
 
 
 class SearchIn(CriteriaIn):
@@ -65,6 +66,7 @@ class ListingQuery(CriteriaIn):
     status: str = "active"  # active | sold | removed | all
     search_id: int | None = None
     favorites_only: bool = False
+    subscribed_only: bool = False
     show_hidden: bool = False  # include hidden listings among the others
     hidden_only: bool = False  # only the listings this user has hidden
     text: str | None = None
@@ -118,6 +120,7 @@ class ListingCardOut(ORM):
     photos: list[str] = []
     price_dropped: bool = False
     favorite: bool = False
+    subscribed: bool = False
     hidden: bool = False
 
 
@@ -169,6 +172,7 @@ class MapPoint(BaseModel):
 
 class ListingStateIn(BaseModel):
     favorite: bool | None = None
+    subscribed: bool | None = None
     hidden: bool | None = None
     note: str | None = Field(None, max_length=5000)
 

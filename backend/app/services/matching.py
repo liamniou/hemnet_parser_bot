@@ -30,6 +30,7 @@ class Criteria:
     center_lat: float | None = None
     center_lon: float | None = None
     radius_km: float | None = None
+    water_distance_max: int | None = None
 
     @classmethod
     def from_search(cls, s: SavedSearch) -> "Criteria":
@@ -117,6 +118,9 @@ def matches(c: Criteria, listing: Listing, region_ids: Iterable[int]) -> bool:
             return False
         if any(k in hay for k in exclude):
             return False
+    # Unknown distance doesn't match: the user explicitly wants to be close to water.
+    if not _in_range(listing.water_distance, None, c.water_distance_max, strict=True):
+        return False
     if c.radius_km and c.center_lat is not None and c.center_lon is not None:
         if listing.lat is None or listing.lon is None:
             return False

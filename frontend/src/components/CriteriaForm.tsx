@@ -203,6 +203,21 @@ export default function CriteriaForm({ value, onChange, regions, compact }: Prop
           />{" "}
           Include new construction
         </label>
+        <label className="inline">
+          Close to water
+          <select
+            aria-label="Close to water"
+            value={value.water_distance_max ?? ""}
+            onChange={(e) => onChange({ ...value, water_distance_max: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">Any distance</option>
+            {[100, 200, 300, 500, 1000].map((m) => (
+              <option key={m} value={m}>
+                within {m >= 1000 ? `${m / 1000} km` : `${m} m`}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <label className="field">

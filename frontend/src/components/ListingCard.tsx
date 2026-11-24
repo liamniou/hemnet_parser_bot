@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Eye, EyeOff, Heart, TrendingDown } from "lucide-react";
+import { Bell, BellRing, Eye, EyeOff, Heart, TrendingDown } from "lucide-react";
 import CardSlider from "./CardSlider";
 import type { ListingCard as Card } from "../types";
 import { date, kr, num, title } from "../format";
@@ -17,11 +17,12 @@ interface Props {
   l: Card;
   onFavorite?: (l: Card) => void;
   onHide?: (l: Card) => void;
+  onSubscribe?: (l: Card) => void;
   onHover?: (id: string | null) => void;
   highlighted?: boolean;
 }
 
-export default function ListingCardView({ l, onFavorite, onHide, onHover, highlighted }: Props) {
+export default function ListingCardView({ l, onFavorite, onHide, onSubscribe, onHover, highlighted }: Props) {
   return (
     <Link
       to={`/listings/${l.id}`}
@@ -51,6 +52,19 @@ export default function ListingCardView({ l, onFavorite, onHide, onHover, highli
               }}
             >
               {l.hidden ? <Eye size={18} /> : <EyeOff size={18} />}
+            </button>
+          )}
+          {onSubscribe && (
+            <button
+              className={`card-action watch ${l.subscribed ? "on" : ""}`}
+              title={l.subscribed ? "Watching: emails on price drop and sale. Click to stop" : "Watch: email me on price drop and sale"}
+              aria-label={l.subscribed ? "Stop watching" : "Watch"}
+              onClick={(e) => {
+                e.preventDefault();
+                onSubscribe(l);
+              }}
+            >
+              {l.subscribed ? <BellRing size={18} /> : <Bell size={18} />}
             </button>
           )}
           {onFavorite && (

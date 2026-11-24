@@ -444,3 +444,7 @@ legend { font-weight: 600; padding: 0 0.3rem; }
 .cover-type { display: flex; gap: 4px; align-items: center; right: 70px; flex-wrap: wrap; }
 .cover-type .badge.water { font-size: 0.75rem; padding: 2px 7px; border-radius: 6px; }
 .listing-card .badges { right: 84px; flex-wrap: wrap; }
+.listing-card .card-action.watch { opacity: 0; transition: opacity 0.15s; }
+.listing-card .card-action.watch.on { opacity: 1; color: #d97706; }
+.listing-card:hover .card-action.watch, .listing-card .card-action.watch:focus-visible { opacity: 1; }
+@media (hover: none) { .listing-card .card-action.watch { opacity: 1; } }

@@ -248,3 +248,14 @@ def test_new_columns_are_added_to_existing_db_and_backfilled(tmp_path):
     cols = {r[1] for r in con.execute("PRAGMA table_info(listings)")}
     row = con.execute("SELECT detail_fetched_at, detail_attempts FROM listings").fetchone()
     assert "water_distance" in cols and row == (None, 0)
+
+
+def test_watched_listing_gets_followups_without_matching_search(app_env, mail):
+    rid = _setup()
+    app_env.pages = [[make_card("1", livingAndSupplementalAreas="30 m²")]]
+    scanner.scan_region(rid)  # seed: nobody was told about it
+    with session_scope() as db:
+        db.add(UserListing(user_id=2, listing_id="1", subscribed=True))
+    app_env.pages = [[make_card("1", askingPrice="3 000 000 kr")]]
+    scanner.scan_region(rid, "full")
+    assert _notifications() == [("Bob", "price_drop", "1")]

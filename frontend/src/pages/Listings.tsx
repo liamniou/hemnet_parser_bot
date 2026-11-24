@@ -17,6 +17,7 @@ const defaultQuery = (): ListingQuery => ({
   status: "active",
   search_id: null,
   favorites_only: false,
+  subscribed_only: false,
   show_hidden: false,
   hidden_only: false,
   text: null,
@@ -123,6 +124,18 @@ export default function Listings() {
     );
   };
 
+  const toggleSubscribe = async (l: ListingCard) => {
+    const subscribed = !l.subscribed;
+    await api(`/api/listings/${l.id}/state`, { method: "PUT", json: { subscribed } });
+    setPage((p) => {
+      if (!p) return p;
+      if (!subscribed && query.subscribed_only) {
+        return { ...p, items: p.items.filter((x) => x.id !== l.id), total: p.total - 1 };
+      }
+      return { ...p, items: p.items.map((x) => (x.id === l.id ? { ...x, subscribed } : x)) };
+    });
+  };
+
   const [undo, setUndo] = useState<ListingCard | null>(null);
   const setHidden = async (l: ListingCard, hidden: boolean) => {
     await api(`/api/listings/${l.id}/state`, { method: "PUT", json: { hidden } });
@@ -150,7 +163,7 @@ export default function Listings() {
   const saveAsSearch = async () => {
     const name = window.prompt("Name for this search:", "My search");
     if (!name) return;
-    const { status: _s, search_id: _i, favorites_only: _f, show_hidden: _h, hidden_only: _ho, text: _t, sort: _o, page: _p, page_size: _z, ...criteria } = query;
+    const { status: _s, search_id: _i, favorites_only: _f, subscribed_only: _w, show_hidden: _h, hidden_only: _ho, text: _t, sort: _o, page: _p, page_size: _z, ...criteria } = query;
     await api("/api/searches", { method: "POST", json: { ...criteria, name } });
     navigate("/searches");
   };
@@ -203,6 +216,14 @@ export default function Listings() {
             onChange={(e) => update({ favorites_only: e.target.checked })}
           />{" "}
           Saved
+        </label>
+        <label className="inline" title="Listings you get price-drop and sale emails for">
+          <input
+            type="checkbox"
+            checked={query.subscribed_only}
+            onChange={(e) => update({ subscribed_only: e.target.checked })}
+          />{" "}
+          Watching
         </label>
         <label className="inline">
           <input
@@ -295,6 +316,7 @@ export default function Listings() {
                     l={l}
                     onFavorite={toggleFavorite}
                     onHide={(x) => setHidden(x, !x.hidden)}
+                    onSubscribe={toggleSubscribe}
                     onHover={view === "split" ? setHoveredId : undefined}
                     highlighted={view === "split" && hoveredId === l.id}
                   />

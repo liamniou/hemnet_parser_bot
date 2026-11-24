@@ -2,7 +2,7 @@ import html
 import logging
 from datetime import timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -80,7 +80,8 @@ def enqueue_new_listing(db: Session, listing: Listing) -> int:
 
 
 def enqueue_followup(db: Session, listing: Listing, kind: str, ref: str = "") -> int:
-    """Price drops / sold events go to users who were told about the listing or saved it."""
+    """Price drops / sold events go to users who were told about the listing, saved it or
+    are watching it - unless they hid it."""
     flag = {"price_drop": SavedSearch.notify_price_drop, "sold": SavedSearch.notify_sold}[kind]
     recipients: dict[int, int | None] = {}
     rows = db.execute(
@@ -97,7 +98,8 @@ def enqueue_followup(db: Session, listing: Listing, kind: str, ref: str = "") ->
         recipients.setdefault(user_id, search_id)
     for user_id in db.scalars(
         select(UserListing.user_id).where(
-            UserListing.listing_id == listing.id, UserListing.favorite.is_(True)
+            UserListing.listing_id == listing.id,
+            or_(UserListing.favorite.is_(True), UserListing.subscribed.is_(True)),
         )
     ):
         recipients.setdefault(user_id, None)

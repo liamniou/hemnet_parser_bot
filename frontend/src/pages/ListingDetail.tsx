@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ChevronLeft, ChevronRight, EyeOff, ExternalLink, Heart } from "lucide-react";
+import { ArrowLeft, Bell, BellRing, ChevronLeft, ChevronRight, EyeOff, ExternalLink, Heart } from "lucide-react";
 import { MapContainer, Marker, TileLayer } from "react-leaflet";
 import { api } from "../api";
 import { StatusBadge } from "../components/ListingCard";
@@ -41,8 +41,8 @@ export default function ListingDetail() {
   if (error) return <p className="error">{error}</p>;
   if (!l) return <p className="muted">Loading…</p>;
 
-  const setState = async (patch: { favorite?: boolean; hidden?: boolean; note?: string }) => {
-    const res = await api<{ favorite: boolean; hidden: boolean; note: string | null }>(
+  const setState = async (patch: { favorite?: boolean; hidden?: boolean; subscribed?: boolean; note?: string }) => {
+    const res = await api<{ favorite: boolean; hidden: boolean; subscribed: boolean; note: string | null }>(
       `/api/listings/${l.id}/state`,
       { method: "PUT", json: patch },
     );
@@ -109,6 +109,13 @@ export default function ListingDetail() {
           </div>
         </div>
         <div className="row">
+          <button
+            className={l.subscribed ? "on" : ""}
+            title="Email me when the price drops or it sells"
+            onClick={() => setState({ subscribed: !l.subscribed })}
+          >
+            {l.subscribed ? <BellRing size={16} /> : <Bell size={16} />} {l.subscribed ? "Watching" : "Watch"}
+          </button>
           <button className={l.favorite ? "on" : ""} onClick={() => setState({ favorite: !l.favorite })}>
             <Heart size={16} fill={l.favorite ? "currentColor" : "none"} /> {l.favorite ? "Saved" : "Save"}
           </button>
