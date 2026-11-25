@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type { Criteria, Facets, Region } from "../types";
 import RadiusPicker from "./RadiusPicker";
-import { AreaPreview, BoundaryMap, HoverPreview, useBoundaries } from "./Boundaries";
+import { AreaHover, BoundaryMap, useBoundaries, type AreaRef } from "./Boundaries";
 
 interface Props {
   value: Criteria;
@@ -73,9 +73,9 @@ export function Chips({
   selected,
   onChange,
   empty = "Any",
-  preview,
+  area,
 }: {
-  preview?: (value: string) => ReactNode;
+  area?: (value: string) => AreaRef;
   options: { value: string; label: string; count?: number }[];
   selected: string[];
   onChange: (v: string[]) => void;
@@ -97,10 +97,10 @@ export function Chips({
             {o.count != null && <small> {o.count}</small>}
           </button>
         );
-        return preview ? (
-          <HoverPreview key={o.value} preview={() => preview(o.value)}>
+        return area ? (
+          <AreaHover key={o.value} area={area(o.value)}>
             {chip}
-          </HoverPreview>
+          </AreaHover>
         ) : (
           chip
         );
@@ -156,7 +156,7 @@ export default function CriteriaForm({ value, onChange, regions, compact }: Prop
           selected={value.region_ids.map(String)}
           onChange={(v) => onChange({ ...value, region_ids: v.map(Number) })}
           empty="No regions configured yet"
-          preview={(v) => <AreaPreview area={{ regionId: Number(v) }} />}
+          area={(v) => ({ regionId: Number(v) })}
         />
       </div>
 
@@ -175,7 +175,7 @@ export default function CriteriaForm({ value, onChange, regions, compact }: Prop
           selected={value.districts}
           onChange={(v) => onChange({ ...value, districts: v })}
           empty="Districts appear once listings have been scraped"
-          preview={(v) => <AreaPreview area={{ district: v }} />}
+          area={(v) => ({ district: v })}
         />
         {!compact && (value.districts.length > 0 || value.region_ids.length > 0) && (
           <SelectedAreas districts={value.districts} regionIds={value.region_ids} />

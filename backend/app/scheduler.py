@@ -1,9 +1,9 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from app.services import images, notifications, scanner
+from app.services import boundaries, images, notifications, scanner
 
 log = logging.getLogger(__name__)
 
@@ -34,4 +34,12 @@ def build_scheduler() -> BackgroundScheduler:
     sched.add_job(_safe(scanner.check_removed), "interval", minutes=10, id="removed")
     sched.add_job(_safe(images.archive_pending), "interval", seconds=30, id="images")
     sched.add_job(_safe(notifications.dispatch_pending), "interval", seconds=15, id="notify")
+    # Map outlines for every area, so borders show instantly. Cheap when all are cached.
+    sched.add_job(
+        _safe(boundaries.prefetch),
+        "interval",
+        hours=1,
+        id="outlines",
+        next_run_time=datetime.now() + timedelta(minutes=2),
+    )
     return sched

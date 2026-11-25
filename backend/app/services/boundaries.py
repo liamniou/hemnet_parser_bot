@@ -8,7 +8,9 @@ area's listings instead.
 
 import logging
 import math
+import time
 import unicodedata
+from collections import Counter, defaultdict
 from datetime import timedelta
 from statistics import median
 
@@ -17,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.db import session_scope
 from app.hemnet.client import get_client
-from app.models import Boundary, Listing, ListingRegion, Region, utcnow
+from app.models import Boundary, Listing, ListingRegion, Region, SavedSearch, utcnow
 from app.services.matching import listing_places
 
 log = logging.getLogger(__name__)
@@ -45,10 +47,18 @@ def to_geojson(polygons: list) -> dict | None:
     return {"type": "MultiPolygon", "coordinates": valid}
 
 
-def _fresh(row: Boundary | None) -> bool:
-    if row is None:
+def _location_key(location_id: str) -> str:
+    return f"hemnet:{location_id}"
+
+
+def _district_key(name: str, context: str | None) -> str:
+    return f"hemnet-district:{_norm(name)}|{_norm(context)}"
+
+
+def _fresh(row: Boundary | None, margin: timedelta = timedelta(0)) -> bool:
+    if row is None or row.fetched_at is None:
         return False
-    return utcnow() - row.fetched_at < (FOUND_TTL if row.geojson else MISSING_TTL)
+    return utcnow() - row.fetched_at < (FOUND_TTL if row.geojson else MISSING_TTL) - margin
 
 
 def _save(db: Session, key: str, name: str, context: str | None, geojson, label) -> Boundary:
@@ -60,15 +70,19 @@ def _save(db: Session, key: str, name: str, context: str | None, geojson, label)
     return row
 
 
-def location_outline(db: Session, location_id: str, name: str) -> Boundary:
+def location_outline(
+    db: Session, location_id: str, name: str, *, margin=timedelta(0), raise_errors=False
+) -> Boundary:
     """Cached Hemnet outline for a location id."""
-    key = f"hemnet:{location_id}"
+    key = _location_key(location_id)
     cached = db.get(Boundary, key)
-    if _fresh(cached):
+    if _fresh(cached, margin):
         return cached
     try:
         geojson = to_geojson(get_client().location_polygons(location_id))
     except Exception as e:
+        if raise_errors:
+            raise
         log.warning("Hemnet outline for location %s failed: %s", location_id, e)
         return cached or Boundary(key=key, name=name, geojson=None)
     return _save(db, key, name, None, geojson, f"{location_id}:{name}")
@@ -84,10 +98,12 @@ def pick_location(locations, name: str, context: str | None):
     return exact[0] if exact else None
 
 
-def district_outline(db: Session, name: str, context: str | None) -> Boundary:
-    key = f"hemnet-district:{_norm(name)}|{_norm(context)}"
+def district_outline(
+    db: Session, name: str, context: str | None, *, margin=timedelta(0), raise_errors=False
+) -> Boundary:
+    key = _district_key(name, context)
     cached = db.get(Boundary, key)
-    if _fresh(cached):
+    if _fresh(cached, margin):
         return cached
     client = get_client()
     try:
@@ -108,6 +124,8 @@ def district_outline(db: Session, name: str, context: str | None) -> Boundary:
             geojson = to_geojson(polygons)
             label = ", ".join(f"{loc.id}:{loc.name}" for loc in locs)
     except Exception as e:
+        if raise_errors:
+            raise
         log.warning("Hemnet outline for district %r failed: %s", name, e)
         return cached or Boundary(key=key, name=name, context=context, geojson=None)
     return _save(db, key, name, context, geojson, label)
@@ -173,7 +191,7 @@ def _municipality(listing) -> str | None:
     return tail if tail.endswith(" kommun") else None
 
 
-def district_boundary(db: Session, name: str) -> dict:
+def _place_rows(db: Session):
     cols = (
         Listing.lat,
         Listing.lon,
@@ -182,12 +200,19 @@ def district_boundary(db: Session, name: str) -> dict:
         Listing.location_description,
         Listing.municipality,
     )
-    # Plain rows instead of ORM objects: this scans every listing on each call.
-    rows = db.execute(select(*cols).where(Listing.lat.is_not(None)))
-    listings = [x for x in rows if name in listing_places(x)]
-    municipalities = [m for m in map(_municipality, listings) if m]
-    context = max(set(municipalities), key=municipalities.count) if municipalities else None
-    found = district_outline(db, name, context)
+    # Plain rows instead of ORM objects: this scans every listing.
+    return db.execute(select(*cols).where(Listing.lat.is_not(None)))
+
+
+def _context(listings) -> str | None:
+    """The municipality most of the area's listings are in."""
+    counts = Counter(m for m in map(_municipality, listings) if m)
+    return counts.most_common(1)[0][0] if counts else None
+
+
+def district_boundary(db: Session, name: str) -> dict:
+    listings = [x for x in _place_rows(db) if name in listing_places(x)]
+    found = district_outline(db, name, _context(listings))
     if found.geojson:
         return _result("district", name, name, found.geojson, "hemnet")
     hull = hull_outline([(x.lon, x.lat) for x in listings])
@@ -225,3 +250,52 @@ def location_preview(location_id: str, name: str) -> dict:
         found = location_outline(db, location_id, name)
         geojson = found.geojson
         return _result("location", location_id, name, geojson, "hemnet" if geojson else None)
+
+
+# Refresh a little before entries expire, so users never wait on a lookup.
+PREFETCH_MARGIN = timedelta(days=3)
+PREFETCH_PAUSE = 1.0  # seconds between lookups, so scans keep most of Hemnet's attention
+PREFETCH_MAX_FAILURES = 3
+
+
+def prefetch() -> int:
+    """Warm the outline cache for every region and every area users can pick.
+
+    Areas come in order of listing count, so the common ones are ready first. Returns the
+    number of Hemnet lookups made; stops early if Hemnet keeps failing (e.g. Cloudflare)."""
+    from app.services.browse import facets
+
+    with session_scope() as db:
+        regions = [(r.location_id, r.name) for r in db.scalars(select(Region))]
+        names = [d["name"] for d in sorted(facets(db, [])["districts"], key=lambda d: -d["count"])]
+        for districts in db.scalars(select(SavedSearch.districts)):
+            names += districts or []
+        by_place = defaultdict(list)
+        for row in _place_rows(db):
+            for place in listing_places(row):
+                by_place[place].append(row)
+    jobs = [("location", loc_id, name) for loc_id, name in regions]
+    jobs += [("district", name, _context(by_place.get(name, []))) for name in dict.fromkeys(names)]
+    fetched = failures = 0
+    for kind, a, b in jobs:
+        with session_scope() as db:
+            key = _location_key(a) if kind == "location" else _district_key(a, b)
+            if _fresh(db.get(Boundary, key), PREFETCH_MARGIN):
+                continue
+            try:
+                if kind == "location":
+                    location_outline(db, a, b, margin=PREFETCH_MARGIN, raise_errors=True)
+                else:
+                    district_outline(db, a, b, margin=PREFETCH_MARGIN, raise_errors=True)
+                fetched += 1
+                failures = 0
+            except Exception as e:
+                failures += 1
+                log.warning("Prefetching outline for %r failed: %s", a, e)
+                if failures >= PREFETCH_MAX_FAILURES:
+                    log.warning("Hemnet keeps failing; stopping outline prefetch for now")
+                    break
+        time.sleep(PREFETCH_PAUSE)
+    if fetched:
+        log.info("Prefetched %d area outlines", fetched)
+    return fetched
