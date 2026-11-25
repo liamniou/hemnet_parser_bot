@@ -270,3 +270,16 @@ class JobRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     ok: Mapped[bool | None] = mapped_column(Boolean)
     summary: Mapped[str | None] = mapped_column(Text)
+
+
+class Boundary(Base):
+    """Cached OpenStreetMap border lookup (geojson is None when nothing matched)."""
+
+    __tablename__ = "boundaries"
+
+    key: Mapped[str] = mapped_column(String(512), primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    context: Mapped[str | None] = mapped_column(String(255))
+    geojson: Mapped[dict | None] = mapped_column(JSON)
+    osm_name: Mapped[str | None] = mapped_column(String(512))
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

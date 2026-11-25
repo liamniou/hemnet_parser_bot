@@ -235,3 +235,13 @@ export const emptyCriteria = (): Criteria => ({
   radius_km: null,
   water_distance_max: null,
 });
+
+export interface Boundary {
+  kind: "district" | "region" | "location";
+  key: string;
+  name: string;
+  source: "osm" | "listings" | null;
+  geojson: unknown | null;
+  label?: string | null;
+  listing_count?: number;
+}

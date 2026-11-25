@@ -27,6 +27,7 @@ from app.schemas import (
     RegionUpdate,
 )
 from app.services import scanner
+from app.services.boundaries import location_preview
 from app.services.images import images_bytes
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(admin_user)])
@@ -45,6 +46,11 @@ def locations(q: str):
         return [loc.__dict__ for loc in get_client().locations(q.strip())]
     except Exception as e:
         raise HTTPException(502, f"Hemnet lookup failed: {e}") from e
+
+
+@router.get("/boundary-preview")
+def boundary_preview(name: str, parent: str | None = None):
+    return location_preview(name, parent)
 
 
 def _region_out(db: Session, r: Region) -> RegionAdminOut:

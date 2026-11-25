@@ -5,6 +5,7 @@ import { api } from "../api";
 import CriteriaForm from "../components/CriteriaForm";
 import ListingCardView from "../components/ListingCard";
 import ListingsMap from "../components/ListingsMap";
+import { useBoundaries } from "../components/Boundaries";
 import type { ListingCard, ListingPage, ListingQuery, MapPoint, Region, SavedSearch } from "../types";
 import { emptyCriteria } from "../types";
 
@@ -105,6 +106,10 @@ export default function Listings() {
         })),
     [page],
   );
+  // Borders of the areas being filtered on (from the saved search, if one is selected).
+  const active = searches.find((s) => s.id === query.search_id) ?? query;
+  const borders = useBoundaries(view === "grid" ? [] : active.districts, view === "grid" ? [] : active.region_ids);
+
   const highlight = useMemo(
     () => pagePoints.find((p) => p.id === hoveredId) ?? null,
     [pagePoints, hoveredId],
@@ -297,7 +302,7 @@ export default function Listings() {
       {view === "map" ? (
         <>
           <p className="muted small">{points.length} listings with coordinates{loading && " · loading…"}</p>
-          <ListingsMap points={points} />
+          <ListingsMap points={points} borders={borders} />
         </>
       ) : (
         <>
@@ -344,6 +349,7 @@ export default function Listings() {
               <aside className="split-map">
                 <ListingsMap
                   points={pagePoints}
+                  borders={borders}
                   highlight={highlight}
                   onHover={setHoveredId}
                   className="side-map"

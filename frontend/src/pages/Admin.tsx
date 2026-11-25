@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { Pause, Play, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { Chips } from "../components/CriteriaForm";
+import { AreaPreview, HoverPreview } from "../components/Boundaries";
 import type { AdminRegion, AdminUser, HemnetLocation, JobRun } from "../types";
 import { ago, bytes, dateTime, num } from "../format";
 import { useSession } from "../App";
@@ -67,12 +68,21 @@ function AddRegion({ itemTypes, onAdded }: { itemTypes: ItemType[]; onAdded: () 
           <ul className="dropdown">
             {results.map((r) => (
               <li key={r.id} onClick={() => setPicked(r)}>
-                <b>{r.name}</b> <span className="muted small">{r.location_type}{r.parent_name && ` · ${r.parent_name}`}</span>
+                <HoverPreview preview={() => <AreaPreview area={{ location: { name: r.name, parent: r.parent_name } }} />}>
+                  <b>{r.name}</b>
+                </HoverPreview>{" "}
+                <span className="muted small">{r.location_type}{r.parent_name && ` · ${r.parent_name}`}</span>
               </li>
             ))}
           </ul>
         )}
       </div>
+      {picked && (
+        <div className="field">
+          <span>Border preview</span>
+          <AreaPreview area={{ location: { name: picked.name, parent: picked.parent_name } }} height={320} />
+        </div>
+      )}
       <label className="field">
         <span>
           Property types <small className="muted">(none selected = all types)</small>
@@ -134,7 +144,9 @@ function Regions() {
           {regions.map((r) => (
             <tr key={r.id} className={r.enabled ? "" : "dim"}>
               <td>
-                <b>{r.name}</b>
+                <HoverPreview preview={() => <AreaPreview area={{ regionId: r.id }} />}>
+                  <b>{r.name}</b>
+                </HoverPreview>
                 <div className="muted small">
                   {r.location_type}
                   {r.parent_name && ` · ${r.parent_name}`} · id {r.location_id}

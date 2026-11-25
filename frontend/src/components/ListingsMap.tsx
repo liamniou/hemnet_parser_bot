@@ -9,7 +9,8 @@ import {
 } from "react-leaflet";
 import { Link } from "react-router-dom";
 import L from "leaflet";
-import type { MapPoint } from "../types";
+import type { Boundary, MapPoint } from "../types";
+import { BoundaryLayers, boundsOf } from "./Boundaries";
 import { mkr, num } from "../format";
 import {
   GradeChip,
@@ -40,11 +41,22 @@ function framingBounds(points: MapPoint[]) {
   );
 }
 
-function FitBounds({ points, fitKey }: { points: MapPoint[]; fitKey: string }) {
+function FitBounds({
+  points,
+  borders,
+  fitKey,
+}: {
+  points: MapPoint[];
+  borders: Boundary[];
+  fitKey: string;
+}) {
   const map = useMap();
   useEffect(() => {
-    if (!points.length) return;
-    map.fitBounds(framingBounds(points), { padding: [30, 30], maxZoom: 15 });
+    // Selected areas frame the map; listings outside them (rare) are still drawn.
+    const b =
+      boundsOf(borders) ?? (points.length ? framingBounds(points) : null);
+    if (!b) return;
+    map.fitBounds(b, { padding: [30, 30], maxZoom: 15 });
   }, [fitKey, map]);
   return null;
 }
@@ -135,12 +147,19 @@ const Markers = memo(function Markers({
 
 interface Props {
   points: MapPoint[];
+  borders?: Boundary[];
   highlight?: MapPoint | null;
   onHover?: (id: string | null) => void;
   className?: string;
 }
 
-function Legend({ points }: { points: MapPoint[] }) {
+function Legend({
+  points,
+  borders,
+}: {
+  points: MapPoint[];
+  borders: Boundary[];
+}) {
   const groups = new Map<string, { label: string; color: string; n: number }>();
   for (const p of points) {
     const g = typeGroup(p.housing_form);
@@ -149,7 +168,9 @@ function Legend({ points }: { points: MapPoint[] }) {
     groups.set(g.key, cur);
   }
   const inactive = points.some((p) => p.status !== "active");
-  if (groups.size < 2 && !inactive) return null;
+  const osm = borders.some((b) => b.source === "osm");
+  const approx = borders.some((b) => b.source === "listings");
+  if (groups.size < 2 && !inactive && !osm && !approx) return null;
   return (
     <div className="map-legend">
       {[...groups.values()].map((g) => (
@@ -162,21 +183,33 @@ function Legend({ points }: { points: MapPoint[] }) {
           <i className="ring" /> Sold / removed
         </span>
       )}
+      {osm && (
+        <span title="From OpenStreetMap">
+          <b className="line" /> Area border
+        </span>
+      )}
+      {approx && (
+        <span title="Hemnet area with no official border: outline drawn around its listings">
+          <b className="line dashed" /> Approx. area
+        </span>
+      )}
     </div>
   );
 }
 
 export default function ListingsMap({
   points,
+  borders = [],
   highlight,
   onHover,
   className = "big-map",
 }: Props) {
-  const fitKey = points.map((p) => p.id).join(",");
+  const fitKey =
+    points.map((p) => p.id).join(",") + "|" + borders.map((b) => b.kind + b.key + b.source).join(",");
 
   return (
     <div className="map-wrap">
-      <Legend points={points} />
+      <Legend points={points} borders={borders} />
       <MapContainer
         center={[59.33, 18.07]}
         zoom={11}
@@ -187,7 +220,8 @@ export default function ListingsMap({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <FitBounds points={points} fitKey={fitKey} />
+        <FitBounds points={points} borders={borders} fitKey={fitKey} />
+        <BoundaryLayers items={borders} />
         <Markers points={points} onHover={onHover} />
         {highlight && (
           <>

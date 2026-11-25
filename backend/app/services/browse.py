@@ -165,7 +165,7 @@ def facets(db: Session, region_ids: list[int]) -> dict:
         # Hemnet's canonical districts (from the detail page) beat the brokers' free-text
         # location, which only serves as a fallback until the detail page has been fetched.
         if listing.districts:
-            places.update(listing.districts)
+            places.update(set(listing.districts))  # Hemnet sometimes repeats a name
         elif listing.location_description:
             places[listing.location_description.split(",")[0].strip()] += 1
         if listing.housing_form:
