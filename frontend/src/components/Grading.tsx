@@ -22,10 +22,43 @@ export function TypeIcon({ symbol, size = 14 }: { symbol: string | null; size?: 
   return <Icon size={size} aria-hidden />;
 }
 
+// One colour per property group, shared by card labels and map dots. Orange is reserved for
+// the hovered-listing highlight and cyan for the water badge, so neither is used here.
+export const TYPE_GROUPS = [
+  { key: "apartment", label: "Apartment", color: "#2563eb", symbols: ["APARTMENT"] },
+  { key: "house", label: "Villa", color: "#16a34a", symbols: ["HOUSE"] },
+  {
+    key: "row",
+    label: "Row/twin/linked house",
+    color: "#9333ea",
+    symbols: ["ROW_HOUSE", "TWIN_HOUSE", "LINKED_HOUSE", "TERRACED_HOUSE"],
+  },
+  {
+    key: "vacation",
+    label: "Holiday home",
+    color: "#db2777",
+    symbols: ["VACATION_HOUSE", "VACATION_HOME", "WINTERIZED_VACATION_HOME"],
+  },
+  { key: "plot", label: "Plot", color: "#78716c", symbols: ["PLOT"] },
+  {
+    key: "farm",
+    label: "Farm/estate",
+    color: "#a16207",
+    symbols: ["HOMESTEAD", "ESTATE_WITHOUT_CULTIVATION", "FORESTING_ESTATE"],
+  },
+] as const;
+const OTHER = { key: "other", label: "Other", color: "#475569" };
+
+export function typeGroup(symbol: string | null | undefined) {
+  return TYPE_GROUPS.find((g) => (g.symbols as readonly string[]).includes(symbol ?? "")) ?? OTHER;
+}
+
+export const typeColor = (symbol: string | null | undefined) => typeGroup(symbol).color;
+
 export function TypeBadge({ symbol, name }: { symbol: string | null; name: string | null }) {
   if (!symbol && !name) return null;
   return (
-    <span className="type-badge" title={name ?? undefined}>
+    <span className="type-badge" title={name ?? undefined} style={{ "--type": typeColor(symbol) } as CSSProperties}>
       <TypeIcon symbol={symbol} /> {name}
     </span>
   );

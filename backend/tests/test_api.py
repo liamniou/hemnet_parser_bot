@@ -130,7 +130,8 @@ def test_searches_listings_and_ownership(app_env, mail):
     page = alice.post("/api/listings/query", json={"hidden_only": True}).json()
     assert [(x["id"], x["hidden"]) for x in page["items"]] == [("2", True)]
     assert len(alice.post("/api/listings/query", json={"show_hidden": True}).json()["items"]) == 2
-    assert [p["id"] for p in alice.post("/api/listings/map", json={}).json()] == ["1"]
+    points = alice.post("/api/listings/map", json={}).json()
+    assert [(p["id"], p["housing_form"]) for p in points] == [("1", "APARTMENT")]
     assert len(bob.post("/api/listings/query", json={}).json()["items"]) == 2
 
     detail = alice.get("/api/listings/1").json()
