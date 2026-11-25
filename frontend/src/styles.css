@@ -470,3 +470,21 @@ legend { font-weight: 600; padding: 0 0.3rem; }
 .listing-card .card-action.watch.on { opacity: 1; color: #d97706; }
 .listing-card:hover .card-action.watch, .listing-card .card-action.watch:focus-visible { opacity: 1; }
 @media (hover: none) { .listing-card .card-action.watch { opacity: 1; } }
+
+/* Area borders: hover previews and map legend lines. */
+.hover-preview-anchor { display: inline-flex; }
+.hover-preview {
+  position: fixed;
+  z-index: 3000;
+  width: 280px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.2);
+  pointer-events: none;
+}
+.boundary-map .leaflet-container { border-radius: 8px; border: 1px solid var(--border); }
+.boundary-caption { margin: 4px 0 8px; }
+.map-legend b.line { width: 16px; height: 0; border-top: 2.5px solid #0f766e; }
+.map-legend b.line.dashed { border-top-style: dashed; }

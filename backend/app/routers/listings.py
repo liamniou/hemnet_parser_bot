@@ -6,6 +6,7 @@ from app.auth import current_user
 from app.db import get_db
 from app.models import Listing, ListingRegion, Region, User, UserListing
 from app.schemas import (
+    BoundaryQuery,
     ImageOut,
     ListingDetailOut,
     ListingPage,
@@ -14,6 +15,7 @@ from app.schemas import (
     MapPoint,
     PriceChangeOut,
 )
+from app.services import boundaries as b
 from app.services import browse
 
 router = APIRouter(prefix="/api/listings", tags=["listings"])
@@ -47,6 +49,16 @@ def map_points(q: ListingQuery, user: User = Depends(current_user), db: Session 
         for x in listings[:10000]
         if x.lat is not None and x.lon is not None
     ]
+
+
+@router.post("/boundaries")
+def boundaries(body: BoundaryQuery, _: User = Depends(current_user), db: Session = Depends(get_db)):
+    out = [b.district_boundary(db, name) for name in dict.fromkeys(body.districts)]
+    for rid in dict.fromkeys(body.region_ids):
+        region = db.get(Region, rid)
+        if region is not None:
+            out.append(b.region_boundary(db, region))
+    return out
 
 
 @router.get("/facets")

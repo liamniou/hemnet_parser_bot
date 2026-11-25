@@ -137,6 +137,8 @@ def test_searches_listings_and_ownership(app_env, mail):
     detail = alice.get("/api/listings/1").json()
     assert detail["regions"] == ["Stockholm"] and detail["gallery"][0]["url"].startswith("https://")
 
+    with session_scope() as db:
+        db.get(Listing, "1").districts = ["Södermalm", "Södermalm"]
     facets = alice.get("/api/listings/facets", params={"region_ids": "1"}).json()
     assert {"name": "Södermalm", "count": 2} in facets["districts"]
 
@@ -210,3 +212,74 @@ def test_spa_index_is_revalidated_and_assets_are_immutable(app_env, tmp_path, mo
     finally:
         monkeypatch.delenv("STATIC_DIR")
         importlib.reload(main)
+
+
+def test_boundaries_osm_match_cache_and_listing_fallback(app_env, mail, monkeypatch):
+    from app.hemnet.parse import parse_card
+    from app.models import Boundary, utcnow
+    from app.services import boundaries
+    from app.services.scanner import upsert_card
+
+    poly = {"type": "Polygon", "coordinates": [[[18, 59], [18.1, 59], [18.1, 59.1], [18, 59]]]}
+    calls = []
+
+    def fake_search(q):
+        calls.append(q)
+        if q.startswith("Södermalm"):
+            return [
+                {
+                    "name": "Södermalm skola",
+                    "category": "amenity",
+                    "addresstype": "amenity",
+                    "geojson": poly,
+                },
+                {
+                    "name": "Södermalm",
+                    "category": "place",
+                    "addresstype": "suburb",
+                    "geojson": poly,
+                    "display_name": "Södermalm, Stockholm",
+                },
+            ]
+        return [
+            {
+                "name": "Gamla stan",
+                "category": "place",
+                "addresstype": "suburb",
+                "geojson": {"type": "Point", "coordinates": [18, 59]},
+            }
+        ]
+
+    monkeypatch.setattr(boundaries, "_nominatim_search", fake_search)
+    with session_scope() as db:
+        db.add(
+            Region(
+                id=1, location_id="18031", name="Stockholms kommun", parent_name="Stockholms län"
+            )
+        )
+        db.flush()
+        for i, (lat, lon) in enumerate(
+            [(59.30, 18.05), (59.31, 18.08), (59.32, 18.06), (65.0, 15.0)]
+        ):
+            card = parse_card(
+                make_card(
+                    str(i),
+                    locationDescription="Gamla stan, Stockholms kommun",
+                    coordinates={"lat": lat, "long": lon},
+                )
+            )
+            upsert_card(db, card, 1, False, utcnow())
+    c = _client()
+    _login(c, mail, "a@x.se")
+    out = c.post("/api/listings/boundaries", json={"districts": ["Södermalm", "Gamla stan"]}).json()
+    soder, gamla = out
+    assert soder["source"] == "osm" and soder["geojson"] == poly
+    # Gamla stan: OSM only has a point, so the outline is drawn around its listings,
+    # ignoring the mis-geocoded one far up north.
+    assert gamla["source"] == "listings" and gamla["listing_count"] == 4
+    lats = [p[1] for p in gamla["geojson"]["coordinates"][0]]
+    assert max(lats) < 59.4
+    c.post("/api/listings/boundaries", json={"districts": ["Södermalm"]})
+    assert calls.count("Södermalm, None") + calls.count("Södermalm") == 1
+    with session_scope() as db:
+        assert db.get(Boundary, "gamla stan|").geojson is None

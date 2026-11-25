@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "../api";
 import type { Criteria, Facets, Region } from "../types";
 import RadiusPicker from "./RadiusPicker";
+import { AreaPreview, BoundaryMap, HoverPreview, useBoundaries } from "./Boundaries";
 
 interface Props {
   value: Criteria;
@@ -72,7 +73,9 @@ export function Chips({
   selected,
   onChange,
   empty = "Any",
+  preview,
 }: {
+  preview?: (value: string) => ReactNode;
   options: { value: string; label: string; count?: number }[];
   selected: string[];
   onChange: (v: string[]) => void;
@@ -83,7 +86,7 @@ export function Chips({
     <div className="chips">
       {options.map((o) => {
         const on = selected.includes(o.value);
-        return (
+        const chip = (
           <button
             type="button"
             key={o.value}
@@ -94,8 +97,32 @@ export function Chips({
             {o.count != null && <small> {o.count}</small>}
           </button>
         );
+        return preview ? (
+          <HoverPreview key={o.value} preview={() => preview(o.value)}>
+            {chip}
+          </HoverPreview>
+        ) : (
+          chip
+        );
       })}
     </div>
+  );
+}
+
+/** Saved-search editor: all selected areas on one map (districts, else whole regions). */
+function SelectedAreas({ districts, regionIds }: { districts: string[]; regionIds: number[] }) {
+  const borders = useBoundaries(districts, regionIds);
+  const wanted = districts.length || regionIds.length;
+  return (
+    <BoundaryMap
+      items={borders}
+      height={220}
+      caption={
+        borders.length < wanted
+          ? `${borders.length} of ${wanted} selected areas outlined (looking up the rest…)`
+          : `Selected ${districts.length ? "areas" : "regions"}: dashed outlines are approximate (around listings)`
+      }
+    />
   );
 }
 
@@ -129,6 +156,7 @@ export default function CriteriaForm({ value, onChange, regions, compact }: Prop
           selected={value.region_ids.map(String)}
           onChange={(v) => onChange({ ...value, region_ids: v.map(Number) })}
           empty="No regions configured yet"
+          preview={(v) => <AreaPreview area={{ regionId: Number(v) }} />}
         />
       </div>
 
@@ -147,7 +175,11 @@ export default function CriteriaForm({ value, onChange, regions, compact }: Prop
           selected={value.districts}
           onChange={(v) => onChange({ ...value, districts: v })}
           empty="Districts appear once listings have been scraped"
+          preview={(v) => <AreaPreview area={{ district: v }} />}
         />
+        {!compact && (value.districts.length > 0 || value.region_ids.length > 0) && (
+          <SelectedAreas districts={value.districts} regionIds={value.region_ids} />
+        )}
       </div>
 
       <div className="field">

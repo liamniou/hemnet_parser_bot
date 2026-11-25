@@ -253,3 +253,8 @@ class AdminUserOut(UserOut):
 class AdminUserUpdate(BaseModel):
     is_admin: bool | None = None
     disabled: bool | None = None
+
+
+class BoundaryQuery(BaseModel):
+    districts: list[str] = Field(default=[], max_length=50)
+    region_ids: list[int] = Field(default=[], max_length=50)
