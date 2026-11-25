@@ -168,9 +168,9 @@ function Legend({
     groups.set(g.key, cur);
   }
   const inactive = points.some((p) => p.status !== "active");
-  const osm = borders.some((b) => b.source === "osm");
+  const exact = borders.some((b) => b.source === "hemnet");
   const approx = borders.some((b) => b.source === "listings");
-  if (groups.size < 2 && !inactive && !osm && !approx) return null;
+  if (groups.size < 2 && !inactive && !exact && !approx) return null;
   return (
     <div className="map-legend">
       {[...groups.values()].map((g) => (
@@ -183,8 +183,8 @@ function Legend({
           <i className="ring" /> Sold / removed
         </span>
       )}
-      {osm && (
-        <span title="From OpenStreetMap">
+      {exact && (
+        <span title="Area border from Hemnet">
           <b className="line" /> Area border
         </span>
       )}

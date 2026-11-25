@@ -68,7 +68,7 @@ function AddRegion({ itemTypes, onAdded }: { itemTypes: ItemType[]; onAdded: () 
           <ul className="dropdown">
             {results.map((r) => (
               <li key={r.id} onClick={() => setPicked(r)}>
-                <HoverPreview preview={() => <AreaPreview area={{ location: { name: r.name, parent: r.parent_name } }} />}>
+                <HoverPreview preview={() => <AreaPreview area={{ location: { id: r.id, name: r.name } }} />}>
                   <b>{r.name}</b>
                 </HoverPreview>{" "}
                 <span className="muted small">{r.location_type}{r.parent_name && ` · ${r.parent_name}`}</span>
@@ -80,7 +80,7 @@ function AddRegion({ itemTypes, onAdded }: { itemTypes: ItemType[]; onAdded: () 
       {picked && (
         <div className="field">
           <span>Border preview</span>
-          <AreaPreview area={{ location: { name: picked.name, parent: picked.parent_name } }} height={320} />
+          <AreaPreview area={{ location: { id: picked.id, name: picked.name } }} height={320} />
         </div>
       )}
       <label className="field">

@@ -1,6 +1,7 @@
 import logging
 import threading
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from curl_cffi import requests as cffi
@@ -21,6 +22,12 @@ ITEM_TYPES = {
     "gard": "Gård/skog",
     "other": "Övrigt",
 }
+
+
+MAP_BOUNDS_QUERY = (
+    "query webMapBounds($locationIds: [ID!]) "
+    "{ mapBounds(locationIds: $locationIds) { locationPolygons { coordinates } } }"
+)
 
 
 class HemnetError(Exception):
@@ -54,12 +61,19 @@ class HemnetClient:
         self._last = time.monotonic()
 
     def get(self, url: str, *, delay: float | None = None) -> cffi.Response:
+        return self._request("GET", url, delay=delay)
+
+    def _request(
+        self, method: str, url: str, *, delay: float | None = None, **kw: Any
+    ) -> cffi.Response:
         last_exc: Exception | None = None
         for attempt in range(1, self.retries + 1):
             with self._lock:
                 self._throttle(self.delay if delay is None else delay)
                 try:
-                    r = self._session.get(url, timeout=self.timeout, allow_redirects=True)
+                    r = self._session.request(
+                        method, url, timeout=self.timeout, allow_redirects=True, **kw
+                    )
                 except Exception as e:  # network errors
                     last_exc = e
                     r = None
@@ -69,7 +83,9 @@ class HemnetClient:
                 if r.status_code == 200:
                     return r
                 last_exc = HemnetError(f"HTTP {r.status_code} for {url}")
-            log.warning("GET %s failed (attempt %s/%s): %s", url, attempt, self.retries, last_exc)
+            log.warning(
+                "%s %s failed (attempt %s/%s): %s", method, url, attempt, self.retries, last_exc
+            )
             if attempt < self.retries:
                 time.sleep(5 * attempt)
                 if r is not None and r.status_code == 403:
@@ -120,6 +136,28 @@ class HemnetClient:
     def locations(self, query: str) -> list[parse.Location]:
         r = self.get(f"{BASE}/locations/show?{urlencode({'q': query})}", delay=0.5)
         return parse.parse_locations(r.json())
+
+    def location_polygons(self, location_id: str) -> list[list]:
+        """Outline of a Hemnet location, exactly as hemnet.se draws it on its map.
+
+        Returns a list of GeoJSON polygon coordinate arrays (rings of [lon, lat])."""
+        r = self._request(
+            "POST",
+            f"{BASE}/graphql",
+            delay=1.0,
+            json={
+                "operationName": "webMapBounds",
+                "query": MAP_BOUNDS_QUERY,
+                "variables": {"locationIds": [location_id]},
+            },
+            # Cloudflare rejects GraphQL calls that don't look like they come from the site.
+            headers={"origin": BASE, "referer": f"{BASE}/bostader"},
+        )
+        data = r.json()
+        if data.get("errors") or not data.get("data"):
+            raise HemnetError(f"mapBounds failed: {data.get('errors')}")
+        polys = (data["data"].get("mapBounds") or {}).get("locationPolygons") or []
+        return [p["coordinates"] for p in polys if p.get("coordinates")]
 
     def download(self, url: str) -> bytes:
         return self.get(url, delay=0.2).content

@@ -273,7 +273,7 @@ class JobRun(Base):
 
 
 class Boundary(Base):
-    """Cached OpenStreetMap border lookup (geojson is None when nothing matched)."""
+    """Cached Hemnet area outline (geojson is None when nothing matched)."""
 
     __tablename__ = "boundaries"
 
@@ -281,5 +281,6 @@ class Boundary(Base):
     name: Mapped[str] = mapped_column(String(255))
     context: Mapped[str | None] = mapped_column(String(255))
     geojson: Mapped[dict | None] = mapped_column(JSON)
-    osm_name: Mapped[str | None] = mapped_column(String(512))
+    # Matched Hemnet location ("id:name"); column name kept from the earlier OSM version.
+    label: Mapped[str | None] = mapped_column("osm_name", String(512))
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

@@ -1,124 +1,116 @@
 """Area borders for the map.
 
-Real borders come from OpenStreetMap (Nominatim) when a place with a matching name exists.
-Hemnet's own areas often don't exist in OSM (e.g. "Vasastan / Norrmalm"), so those fall back to
-an approximate outline: the convex hull around listings in the area.
+Outlines come from Hemnet itself (the same polygons hemnet.se draws when you search an area).
+Regions carry their Hemnet location id; district names from listings are resolved to an id via
+Hemnet's location search. If Hemnet has no outline, an approximate one is drawn around the
+area's listings instead.
 """
 
 import logging
 import math
-import threading
-import time
 import unicodedata
 from datetime import timedelta
 from statistics import median
-from typing import Any
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.db import session_scope
+from app.hemnet.client import get_client
 from app.models import Boundary, Listing, ListingRegion, Region, utcnow
 from app.services.matching import listing_places
 
 log = logging.getLogger(__name__)
 
-NOMINATIM = "https://nominatim.openstreetmap.org/search"
-# Only real places/administrative areas count; never shops, schools or streets with that name.
-PLACE_TYPES = {
-    "suburb", "quarter", "neighbourhood", "city_district", "borough", "district",
-    "municipality", "town", "village", "hamlet", "city", "island", "county", "state_district",
-}  # fmt: skip
 FOUND_TTL = timedelta(days=90)
-MISSING_TTL = timedelta(days=14)
-
-_lock = threading.Lock()
-_last_call = 0.0
+MISSING_TTL = timedelta(days=7)
 
 
 def _norm(s: str | None) -> str:
-    s = unicodedata.normalize("NFC", s or "").casefold().strip()
-    return s.removesuffix(" kommun").strip()
+    return unicodedata.normalize("NFC", s or "").casefold().strip()
 
 
-def name_matches(wanted: str, osm_name: str | None) -> bool:
-    """Same place name, tolerating Swedish endings (Vasastan ~ Vasastaden)."""
-    a, b = _norm(wanted), _norm(osm_name)
-    if not a or not b:
+def to_geojson(polygons: list) -> dict | None:
+    valid = [
+        p
+        for p in polygons
+        if isinstance(p, list)
+        and p
+        and all(isinstance(ring, list) and len(ring) >= 4 for ring in p)
+    ]
+    if not valid:
+        return None
+    if len(valid) == 1:
+        return {"type": "Polygon", "coordinates": valid[0]}
+    return {"type": "MultiPolygon", "coordinates": valid}
+
+
+def _fresh(row: Boundary | None) -> bool:
+    if row is None:
         return False
-    if a == b:
-        return True
-    p = 0
-    while p < min(len(a), len(b)) and a[p] == b[p]:
-        p += 1
-    return p >= 6 and abs(len(a) - len(b)) <= 4
+    return utcnow() - row.fetched_at < (FOUND_TTL if row.geojson else MISSING_TTL)
 
 
-def _nominatim_search(query: str) -> list[dict[str, Any]]:
-    """One Nominatim query, at most one per second as its usage policy requires."""
-    global _last_call
-    s = get_settings()
-    contact = s.smtp_from or s.public_url
-    with _lock:
-        wait = _last_call + 1.1 - time.monotonic()
-        if wait > 0:
-            time.sleep(wait)
-        try:
-            r = httpx.get(
-                NOMINATIM,
-                params={
-                    "q": query,
-                    "countrycodes": "se",
-                    "format": "jsonv2",
-                    "polygon_geojson": 1,
-                    "polygon_threshold": 0.0003,
-                    "limit": 8,
-                },
-                headers={"User-Agent": f"HemnetWatch/1.0 (self-hosted; {contact})"},
-                timeout=20,
-            )
-            r.raise_for_status()
-            return r.json()
-        finally:
-            _last_call = time.monotonic()
-
-
-def osm_boundary(db: Session, name: str, context: str | None) -> Boundary:
-    """Cached OSM lookup of `name` near `context` (municipality or county)."""
-    key = f"{_norm(name)}|{_norm(context)}"
-    cached = db.get(Boundary, key)
-    if cached:
-        ttl = FOUND_TTL if cached.geojson else MISSING_TTL
-        if utcnow() - cached.fetched_at < ttl:
-            return cached
-    query = f"{name}, {context}" if context else name
-    try:
-        results = _nominatim_search(query)
-    except Exception as e:
-        log.warning("Nominatim lookup for %r failed: %s", query, e)
-        if cached:
-            return cached
-        return Boundary(key=key, name=name, context=context, geojson=None, fetched_at=utcnow())
-    best = next(
-        (
-            r
-            for r in results
-            if (r.get("geojson") or {}).get("type") in ("Polygon", "MultiPolygon")
-            and r.get("category") in ("boundary", "place")
-            and (r.get("addresstype") in PLACE_TYPES or r.get("category") == "boundary")
-            and name_matches(name, r.get("name"))
-        ),
-        None,
-    )
-    row = cached or Boundary(key=key)
-    row.name, row.context, row.fetched_at = name, context, utcnow()
-    row.geojson = best["geojson"] if best else None
-    row.osm_name = best.get("display_name") if best else None
+def _save(db: Session, key: str, name: str, context: str | None, geojson, label) -> Boundary:
+    row = db.get(Boundary, key) or Boundary(key=key)
+    row.name, row.context, row.geojson, row.label = name, context, geojson, label
+    row.fetched_at = utcnow()
     db.merge(row)
     db.commit()
     return row
+
+
+def location_outline(db: Session, location_id: str, name: str) -> Boundary:
+    """Cached Hemnet outline for a location id."""
+    key = f"hemnet:{location_id}"
+    cached = db.get(Boundary, key)
+    if _fresh(cached):
+        return cached
+    try:
+        geojson = to_geojson(get_client().location_polygons(location_id))
+    except Exception as e:
+        log.warning("Hemnet outline for location %s failed: %s", location_id, e)
+        return cached or Boundary(key=key, name=name, geojson=None)
+    return _save(db, key, name, None, geojson, f"{location_id}:{name}")
+
+
+def pick_location(locations, name: str, context: str | None):
+    """The Hemnet location called exactly `name`, preferably inside municipality `context`."""
+    exact = [x for x in locations if _norm(x.name) == _norm(name)]
+    if context:
+        local = [x for x in exact if _norm(x.parent_name) == _norm(context)]
+        exact = local or (exact if len(exact) == 1 else [])
+    exact.sort(key=lambda x: x.location_type != "district")
+    return exact[0] if exact else None
+
+
+def district_outline(db: Session, name: str, context: str | None) -> Boundary:
+    key = f"hemnet-district:{_norm(name)}|{_norm(context)}"
+    cached = db.get(Boundary, key)
+    if _fresh(cached):
+        return cached
+    client = get_client()
+    try:
+        locs = [pick_location(client.locations(name), name, context)]
+        # Listings use combined labels ("Kista / Hässelby / Vällingby / Spånga") that Hemnet's
+        # location search doesn't know; then outline every part, but only if all parts exist.
+        parts = [p.strip() for p in name.split(" / ") if p.strip()]
+        if locs[0] is None and len(parts) > 1:
+            locs = []
+            for part in parts:
+                locs.append(pick_location(client.locations(part), part, context))
+                if locs[-1] is None:
+                    break
+        if not locs or None in locs:
+            geojson, label = None, None
+        else:
+            polygons = [p for loc in locs for p in client.location_polygons(loc.id)]
+            geojson = to_geojson(polygons)
+            label = ", ".join(f"{loc.id}:{loc.name}" for loc in locs)
+    except Exception as e:
+        log.warning("Hemnet outline for district %r failed: %s", name, e)
+        return cached or Boundary(key=key, name=name, context=context, geojson=None)
+    return _save(db, key, name, context, geojson, label)
 
 
 def _convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -174,17 +166,30 @@ def _result(kind: str, key: str, name: str, geojson: dict | None, source: str | 
     return {"kind": kind, "key": key, "name": name, "geojson": geojson, "source": source, **extra}
 
 
+def _municipality(listing) -> str | None:
+    if listing.municipality:
+        return listing.municipality
+    tail = (listing.location_description or "").rsplit(",", 1)[-1].strip()
+    return tail if tail.endswith(" kommun") else None
+
+
 def district_boundary(db: Session, name: str) -> dict:
-    listings = [
-        x
-        for x in db.scalars(select(Listing).where(Listing.lat.is_not(None)))
-        if name in listing_places(x)
-    ]
-    municipalities = [x.municipality for x in listings if x.municipality]
+    cols = (
+        Listing.lat,
+        Listing.lon,
+        Listing.districts,
+        Listing.area_name,
+        Listing.location_description,
+        Listing.municipality,
+    )
+    # Plain rows instead of ORM objects: this scans every listing on each call.
+    rows = db.execute(select(*cols).where(Listing.lat.is_not(None)))
+    listings = [x for x in rows if name in listing_places(x)]
+    municipalities = [m for m in map(_municipality, listings) if m]
     context = max(set(municipalities), key=municipalities.count) if municipalities else None
-    osm = osm_boundary(db, name, context)
-    if osm.geojson:
-        return _result("district", name, name, osm.geojson, "osm", label=osm.osm_name)
+    found = district_outline(db, name, context)
+    if found.geojson:
+        return _result("district", name, name, found.geojson, "hemnet")
     hull = hull_outline([(x.lon, x.lat) for x in listings])
     return _result(
         "district", name, name, hull, "listings" if hull else None, listing_count=len(listings)
@@ -192,11 +197,9 @@ def district_boundary(db: Session, name: str) -> dict:
 
 
 def region_boundary(db: Session, region: Region) -> dict:
-    osm = osm_boundary(db, region.name, region.parent_name)
-    if osm.geojson:
-        return _result(
-            "region", str(region.id), region.name, osm.geojson, "osm", label=osm.osm_name
-        )
+    found = location_outline(db, region.location_id, region.name)
+    if found.geojson:
+        return _result("region", str(region.id), region.name, found.geojson, "hemnet")
     coords = [
         (lon, lat)
         for lon, lat in db.execute(
@@ -216,10 +219,9 @@ def region_boundary(db: Session, region: Region) -> dict:
     )
 
 
-def location_preview(name: str, parent: str | None) -> dict:
+def location_preview(location_id: str, name: str) -> dict:
     """Border for a Hemnet location that isn't a region yet (admin preview)."""
     with session_scope() as db:
-        osm = osm_boundary(db, name, parent)
-        return _result(
-            "location", name, name, osm.geojson, "osm" if osm.geojson else None, label=osm.osm_name
-        )
+        found = location_outline(db, location_id, name)
+        geojson = found.geojson
+        return _result("location", location_id, name, geojson, "hemnet" if geojson else None)
