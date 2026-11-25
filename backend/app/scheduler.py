@@ -34,11 +34,12 @@ def build_scheduler() -> BackgroundScheduler:
     sched.add_job(_safe(scanner.check_removed), "interval", minutes=10, id="removed")
     sched.add_job(_safe(images.archive_pending), "interval", seconds=30, id="images")
     sched.add_job(_safe(notifications.dispatch_pending), "interval", seconds=15, id="notify")
-    # Map outlines for every area, so borders show instantly. Cheap when all are cached.
+    # Map outlines for every area, so borders show instantly. Areas first seen between runs
+    # are still looked up on demand.
     sched.add_job(
         _safe(boundaries.prefetch),
         "interval",
-        hours=1,
+        days=1,
         id="outlines",
         next_run_time=datetime.now() + timedelta(minutes=2),
     )
