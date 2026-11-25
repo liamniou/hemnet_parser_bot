@@ -49,8 +49,8 @@ def locations(q: str):
 
 
 @router.get("/boundary-preview")
-def boundary_preview(name: str, parent: str | None = None):
-    return location_preview(name, parent)
+def boundary_preview(location_id: str, name: str = ""):
+    return location_preview(location_id, name)
 
 
 def _region_out(db: Session, r: Region) -> RegionAdminOut:

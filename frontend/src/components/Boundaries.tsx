@@ -31,7 +31,7 @@ const fetchOne = (body: { districts?: string[]; region_ids?: number[] }) =>
 export type AreaRef =
   | { district: string }
   | { regionId: number }
-  | { location: { name: string; parent: string | null } };
+  | { location: { id: string; name: string } };
 
 export function loadBoundary(ref: AreaRef): Promise<Boundary | null> {
   if ("district" in ref)
@@ -42,9 +42,9 @@ export function loadBoundary(ref: AreaRef): Promise<Boundary | null> {
     return load(`r:${ref.regionId}`, () =>
       fetchOne({ region_ids: [ref.regionId] }),
     );
-  const { name, parent } = ref.location;
-  const qs = new URLSearchParams({ name, ...(parent ? { parent } : {}) });
-  return load(`l:${name}|${parent}`, () =>
+  const { id, name } = ref.location;
+  const qs = new URLSearchParams({ location_id: id, name });
+  return load(`l:${id}`, () =>
     api<Boundary>(`/api/admin/boundary-preview?${qs}`),
   );
 }
@@ -65,7 +65,7 @@ export function useBoundaries(
       setItems([]);
       return;
     }
-    // Draw each border as soon as it arrives; uncached OSM lookups take ~1 s each.
+    // Draw each border as soon as it arrives; uncached Hemnet lookups take a second or two.
     const got: (Boundary | null)[] = refs.map(() => null);
     refs.forEach((ref, i) =>
       loadBoundary(ref).then((b) => {
@@ -118,8 +118,8 @@ export function boundsOf(items: Boundary[]): L.LatLngBounds | null {
 export const sourceLabel = (b: Boundary | null) =>
   !b || !b.geojson
     ? "No border found"
-    : b.source === "osm"
-      ? "Border from OpenStreetMap"
+    : b.source === "hemnet"
+      ? "Border from Hemnet"
       : `Approximate outline around ${b.listing_count ?? ""} listings`;
 
 // ---------------------------------------------------------------- previews

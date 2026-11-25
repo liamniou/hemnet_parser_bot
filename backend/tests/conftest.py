@@ -76,6 +76,8 @@ class FakeHemnet:
         self.sales: list[Any] = []
         self.total_override: int | None = None
         self.calls: list[tuple] = []
+        self.polygons: dict[str, list] = {}
+        self.location_results: dict[str, list] = {}
 
     def search(self, location_id, item_types, page=1, published_since=None):
         from app.hemnet.parse import parse_search
@@ -101,7 +103,14 @@ class FakeHemnet:
     def locations(self, q):
         from app.hemnet.parse import Location
 
+        self.calls.append(("locations", q))
+        if q in self.location_results:
+            return self.location_results[q]
         return [Location("18031", "Stockholms kommun", "municipality", "Stockholms län")]
+
+    def location_polygons(self, location_id):
+        self.calls.append(("polygons", location_id))
+        return self.polygons.get(location_id, [])
 
     def download(self, url):
         import io

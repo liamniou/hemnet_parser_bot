@@ -240,8 +240,7 @@ export interface Boundary {
   kind: "district" | "region" | "location";
   key: string;
   name: string;
-  source: "osm" | "listings" | null;
+  source: "hemnet" | "listings" | null;
   geojson: unknown | null;
-  label?: string | null;
   listing_count?: number;
 }
