@@ -115,8 +115,10 @@ export default function Listings() {
     window.scrollTo(0, 0);
   };
 
+  // Any filter change starts over at page 1. The page is set last because the Filters panel
+  // passes back the whole query, including the current page.
   const update = useCallback((patch: Partial<ListingQuery>) => {
-    setQuery((q) => ({ ...q, page: 1, ...patch }));
+    setQuery((q) => ({ ...q, ...patch, page: 1 }));
   }, []);
 
   const toggleFavorite = async (l: ListingCard) => {
