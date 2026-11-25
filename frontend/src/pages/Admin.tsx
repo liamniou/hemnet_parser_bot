@@ -3,7 +3,7 @@ import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { Pause, Play, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { Chips } from "../components/CriteriaForm";
-import { AreaPreview, HoverPreview } from "../components/Boundaries";
+import { AreaHover, AreaPreview } from "../components/Boundaries";
 import type { AdminRegion, AdminUser, HemnetLocation, JobRun } from "../types";
 import { ago, bytes, dateTime, num } from "../format";
 import { useSession } from "../App";
@@ -68,9 +68,9 @@ function AddRegion({ itemTypes, onAdded }: { itemTypes: ItemType[]; onAdded: () 
           <ul className="dropdown">
             {results.map((r) => (
               <li key={r.id} onClick={() => setPicked(r)}>
-                <HoverPreview preview={() => <AreaPreview area={{ location: { id: r.id, name: r.name } }} />}>
+                <AreaHover area={{ location: { id: r.id, name: r.name } }}>
                   <b>{r.name}</b>
-                </HoverPreview>{" "}
+                </AreaHover>{" "}
                 <span className="muted small">{r.location_type}{r.parent_name && ` · ${r.parent_name}`}</span>
               </li>
             ))}
@@ -144,9 +144,9 @@ function Regions() {
           {regions.map((r) => (
             <tr key={r.id} className={r.enabled ? "" : "dim"}>
               <td>
-                <HoverPreview preview={() => <AreaPreview area={{ regionId: r.id }} />}>
+                <AreaHover area={{ regionId: r.id }}>
                   <b>{r.name}</b>
-                </HoverPreview>
+                </AreaHover>
                 <div className="muted small">
                   {r.location_type}
                   {r.parent_name && ` · ${r.parent_name}`} · id {r.location_id}

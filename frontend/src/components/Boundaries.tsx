@@ -9,14 +9,22 @@ import type { Boundary } from "../types";
 // ---------------------------------------------------------------- loading (cached per session)
 
 const cache = new Map<string, Promise<Boundary | null>>();
+// Settled results, so previews can render a cached border on their very first frame.
+const settled = new Map<string, Boundary | null>();
 
 function load(cacheKey: string, fetcher: () => Promise<Boundary | null>) {
   let p = cache.get(cacheKey);
   if (!p) {
-    p = fetcher().catch(() => {
-      cache.delete(cacheKey);
-      return null;
-    });
+    p = fetcher().then(
+      (b) => {
+        settled.set(cacheKey, b);
+        return b;
+      },
+      () => {
+        cache.delete(cacheKey);
+        return null;
+      },
+    );
     cache.set(cacheKey, p);
   }
   return p;
@@ -33,21 +41,24 @@ export type AreaRef =
   | { regionId: number }
   | { location: { id: string; name: string } };
 
+const refKey = (ref: AreaRef) =>
+  "district" in ref
+    ? `d:${ref.district}`
+    : "regionId" in ref
+      ? `r:${ref.regionId}`
+      : `l:${ref.location.id}`;
+
 export function loadBoundary(ref: AreaRef): Promise<Boundary | null> {
-  if ("district" in ref)
-    return load(`d:${ref.district}`, () =>
-      fetchOne({ districts: [ref.district] }),
-    );
-  if ("regionId" in ref)
-    return load(`r:${ref.regionId}`, () =>
-      fetchOne({ region_ids: [ref.regionId] }),
-    );
-  const { id, name } = ref.location;
-  const qs = new URLSearchParams({ location_id: id, name });
-  return load(`l:${id}`, () =>
-    api<Boundary>(`/api/admin/boundary-preview?${qs}`),
-  );
+  return load(refKey(ref), () => {
+    if ("district" in ref) return fetchOne({ districts: [ref.district] });
+    if ("regionId" in ref) return fetchOne({ region_ids: [ref.regionId] });
+    const { id, name } = ref.location;
+    const qs = new URLSearchParams({ location_id: id, name });
+    return api<Boundary>(`/api/admin/boundary-preview?${qs}`);
+  });
 }
+
+const peekBoundary = (ref: AreaRef) => settled.get(refKey(ref));
 
 /** Borders for the selected areas; districts take precedence over whole regions. */
 export function useBoundaries(
@@ -182,11 +193,13 @@ export function AreaPreview({
   area: AreaRef;
   height?: number;
 }) {
-  const [b, setB] = useState<Boundary | null | undefined>(undefined);
+  const [b, setB] = useState<Boundary | null | undefined>(() =>
+    peekBoundary(area),
+  );
   const key = JSON.stringify(area);
   useEffect(() => {
     let live = true;
-    setB(undefined);
+    setB(peekBoundary(area));
     loadBoundary(area).then((x) => live && setB(x));
     return () => {
       live = false;
@@ -204,9 +217,12 @@ export function AreaPreview({
 /** Shows `preview` in a floating card while the pointer rests on `children`. */
 export function HoverPreview({
   preview,
+  onIntent,
   children,
 }: {
   preview: () => ReactNode;
+  /** Called as soon as the pointer enters, to start loading before the card opens. */
+  onIntent?: () => void;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -214,6 +230,7 @@ export function HoverPreview({
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
   const open = () => {
+    onIntent?.();
     timer.current = window.setTimeout(() => {
       const r = ref.current?.getBoundingClientRect();
       if (!r) return;
@@ -248,5 +265,23 @@ export function HoverPreview({
           document.body,
         )}
     </span>
+  );
+}
+
+/** Hover card with the area's border; starts fetching it the moment the pointer arrives. */
+export function AreaHover({
+  area,
+  children,
+}: {
+  area: AreaRef;
+  children: ReactNode;
+}) {
+  return (
+    <HoverPreview
+      onIntent={() => void loadBoundary(area)}
+      preview={() => <AreaPreview area={area} />}
+    >
+      {children}
+    </HoverPreview>
   );
 }

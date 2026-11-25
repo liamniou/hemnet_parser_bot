@@ -273,3 +273,44 @@ def test_boundaries_from_hemnet_cache_and_listing_fallback(app_env, mail):
     before = len(app_env.calls)
     c.post("/api/listings/boundaries", json=body)
     assert len(app_env.calls) == before  # all cached, including the miss
+
+
+def test_outline_prefetch_warms_cache_and_stops_on_failures(app_env, mail, monkeypatch):
+    from app.hemnet.client import HemnetError
+    from app.hemnet.parse import Location, parse_card
+    from app.models import utcnow
+    from app.services import boundaries
+    from app.services.scanner import upsert_card
+
+    monkeypatch.setattr(boundaries, "PREFETCH_PAUSE", 0)
+    ring = [[18, 59], [18.1, 59], [18.1, 59.1], [18, 59]]
+    app_env.polygons = {"18031": [[ring]], "5": [[ring]]}
+    app_env.location_results = {"Södermalm": [Location("5", "Södermalm", "district", None)]}
+    with session_scope() as db:
+        db.add(Region(id=1, location_id="18031", name="Stockholms kommun"))
+        db.flush()
+        for i, place in enumerate(["Södermalm", "Gamla stan", "Gamla stan"]):
+            card = parse_card(make_card(str(i), locationDescription=f"{place}, Stockholms kommun"))
+            upsert_card(db, card, 1, False, utcnow())
+    assert boundaries.prefetch() == 3  # region + both areas (Gamla stan: cached miss)
+    assert boundaries.prefetch() == 0
+    c = _client()
+    _login(c, mail, "a@x.se")
+    before = len(app_env.calls)
+    out = c.post(
+        "/api/listings/boundaries", json={"districts": ["Södermalm"], "region_ids": [1]}
+    ).json()
+    assert [b["source"] for b in out] == ["hemnet", "hemnet"]
+    assert len(app_env.calls) == before
+
+    with session_scope() as db:
+        db.query(boundaries.Boundary).delete()
+    calls = []
+
+    def down(*_):
+        calls.append(1)
+        raise HemnetError("HTTP 403")
+
+    app_env.location_polygons = app_env.locations = down
+    assert boundaries.prefetch() == 0
+    assert len(calls) == boundaries.PREFETCH_MAX_FAILURES
