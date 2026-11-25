@@ -143,6 +143,8 @@ export interface MapPoint {
   street_address: string | null;
   rooms: number | null;
   living_area: number | null;
+  housing_form: string | null;
+  housing_form_name: string | null;
 }
 
 export interface Region {

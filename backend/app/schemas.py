@@ -168,6 +168,8 @@ class MapPoint(BaseModel):
     street_address: str | None
     rooms: float | None
     living_area: float | None
+    housing_form: str | None = None
+    housing_form_name: str | None = None
 
 
 class ListingStateIn(BaseModel):

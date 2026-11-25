@@ -100,6 +100,8 @@ export default function Listings() {
           street_address: l.street_address,
           rooms: l.rooms,
           living_area: l.living_area,
+          housing_form: l.housing_form,
+          housing_form_name: l.housing_form_name,
         })),
     [page],
   );
